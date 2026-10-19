@@ -193,3 +193,6 @@ cython_debug/
 mlruns/
 mlartifacts/
 mlflow.db
+
+# Configuración local de Claude Code (personal, no se comparte)
+.claude/settings.local.json
