@@ -1,0 +1,91 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1280 320" width="1280" height="320" role="img" aria-labelledby="titulo descripcion">
+  <title id="titulo">mibici-demand</title>
+  <desc id="descripcion">Pronóstico de demanda por estación y hora · MiBici Guadalajara</desc>
+  <defs>
+    <linearGradient id="fondo" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#0b3442"/>
+      <stop offset="0.55" stop-color="#0e5a62"/>
+      <stop offset="1" stop-color="#1b7a5c"/>
+    </linearGradient>
+    <radialGradient id="brillo" cx="0.85" cy="0.15" r="0.65">
+      <stop offset="0" stop-color="#8be8c0" stop-opacity="0.30"/>
+      <stop offset="1" stop-color="#8be8c0" stop-opacity="0"/>
+    </radialGradient>
+  </defs>
+
+  <!-- Fondo propio: se ve igual en modo claro y oscuro -->
+  <rect width="1280" height="320" rx="24" fill="url(#fondo)"/>
+  <rect width="1280" height="320" rx="24" fill="url(#brillo)"/>
+
+  <!-- Red de estaciones conectadas -->
+  <g stroke="#bff3dc" stroke-opacity="0.35" stroke-width="2">
+    <line x1="930" y1="70" x2="1010" y2="46"/>
+    <line x1="1010" y1="46" x2="1092" y2="82"/>
+    <line x1="1092" y1="82" x2="1176" y2="52"/>
+    <line x1="930" y1="70" x2="978" y2="136"/>
+    <line x1="1010" y1="46" x2="978" y2="136"/>
+    <line x1="1092" y1="82" x2="1060" y2="150"/>
+    <line x1="978" y1="136" x2="1060" y2="150"/>
+    <line x1="1060" y1="150" x2="1150" y2="128"/>
+    <line x1="1092" y1="82" x2="1150" y2="128"/>
+    <line x1="1176" y1="52" x2="1150" y2="128"/>
+    <line x1="1150" y1="128" x2="1226" y2="112"/>
+    <line x1="1176" y1="52" x2="1226" y2="112"/>
+  </g>
+  <g fill="#0e5a62" stroke="#bff3dc" stroke-width="3">
+    <circle cx="930" cy="70" r="6"/>
+    <circle cx="1010" cy="46" r="6"/>
+    <circle cx="1092" cy="82" r="9"/>
+    <circle cx="1176" cy="52" r="6"/>
+    <circle cx="978" cy="136" r="6"/>
+    <circle cx="1060" cy="150" r="6"/>
+    <circle cx="1150" cy="128" r="9"/>
+    <circle cx="1226" cy="112" r="6"/>
+  </g>
+
+  <!-- Perfil de demanda por hora (24 barras) -->
+  <g fill="#8be8c0" fill-opacity="0.40">
+    <rect x="300" y="287.8" width="24" height="4.2" rx="4"/>
+    <rect x="338" y="289.9" width="24" height="2.1" rx="4"/>
+    <rect x="376" y="289.9" width="24" height="2.1" rx="4"/>
+    <rect x="414" y="289.9" width="24" height="2.1" rx="4"/>
+    <rect x="452" y="287.8" width="24" height="4.2" rx="4"/>
+    <rect x="490" y="281.5" width="24" height="10.5" rx="4"/>
+    <rect x="528" y="266.9" width="24" height="25.1" rx="4"/>
+    <rect x="566" y="246.0" width="24" height="46.0" rx="4"/>
+    <rect x="604" y="254.4" width="24" height="37.6" rx="4"/>
+    <rect x="642" y="266.9" width="24" height="25.1" rx="4"/>
+    <rect x="680" y="271.1" width="24" height="20.9" rx="4"/>
+    <rect x="718" y="269.0" width="24" height="23.0" rx="4"/>
+    <rect x="756" y="264.8" width="24" height="27.2" rx="4"/>
+    <rect x="794" y="266.9" width="24" height="25.1" rx="4"/>
+    <rect x="832" y="269.0" width="24" height="23.0" rx="4"/>
+    <rect x="870" y="266.9" width="24" height="25.1" rx="4"/>
+    <rect x="908" y="260.6" width="24" height="31.4" rx="4"/>
+    <rect x="946" y="248.1" width="24" height="43.9" rx="4"/>
+    <rect x="984" y="252.3" width="24" height="39.7" rx="4"/>
+    <rect x="1022" y="264.8" width="24" height="27.2" rx="4"/>
+    <rect x="1060" y="273.2" width="24" height="18.8" rx="4"/>
+    <rect x="1098" y="277.4" width="24" height="14.6" rx="4"/>
+    <rect x="1136" y="281.5" width="24" height="10.5" rx="4"/>
+    <rect x="1174" y="285.7" width="24" height="6.3" rx="4"/>
+  </g>
+
+  <!-- Bicicleta -->
+  <g fill="none" stroke="#ffffff" stroke-width="6" stroke-linecap="round" stroke-linejoin="round">
+    <circle cx="112" cy="196" r="44"/>
+    <circle cx="236" cy="196" r="44"/>
+    <polyline points="112,196 168,196 152,134 112,196"/>
+    <polyline points="152,134 218,138 168,196"/>
+    <line x1="218" y1="138" x2="236" y2="196"/>
+    <line x1="140" y1="124" x2="166" y2="124"/>
+    <polyline points="218,138 212,118 234,114"/>
+  </g>
+  <circle cx="168" cy="196" r="6" fill="#ffffff"/>
+
+  <!-- Texto -->
+  <g font-family="-apple-system, BlinkMacSystemFont, 'Segoe UI', Helvetica, Arial, sans-serif">
+    <text x="300" y="150" font-size="76" font-weight="700" fill="#ffffff" letter-spacing="-1">mibici-demand</text>
+    <text x="302" y="200" font-size="26" fill="#d4f6e6">Pronóstico de demanda por estación y hora · MiBici Guadalajara</text>
+  </g>
+</svg>

@@ -1,10 +1,61 @@
-# mibici-demand
+<p align="center">
+  <img src="docs/assets/banner.svg" alt="mibici-demand: pronóstico de demanda por estación y hora · MiBici Guadalajara" width="100%">
+</p>
 
-<a target="_blank" href="https://cookiecutter-data-science.drivendata.org/">
-    <img src="https://img.shields.io/badge/CCDS-Project%20template-328F97?logo=cookiecutter" />
-</a>
+<p align="center">
+  <img src="https://img.shields.io/badge/Python-3.12-3776AB?logo=python&logoColor=white" alt="Python 3.12">
+  <img src="https://img.shields.io/badge/pandas-3.0-150458?logo=pandas&logoColor=white" alt="pandas 3.0">
+  <img src="https://img.shields.io/badge/scikit--learn-1.9-F7931E?logo=scikitlearn&logoColor=white" alt="scikit-learn 1.9">
+  <img src="https://img.shields.io/badge/MLflow-3.17-0194E2?logo=mlflow&logoColor=white" alt="MLflow 3.17">
+  <a href="https://cookiecutter-data-science.drivendata.org/"><img src="https://img.shields.io/badge/Cookiecutter-Data%20Science-328F97?logo=cookiecutter&logoColor=white" alt="Cookiecutter Data Science"></a>
+  <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-yellow" alt="Licencia MIT"></a>
+  <img src="https://img.shields.io/badge/Fase%201-en%20progreso-orange" alt="Fase 1 · en progreso">
+</p>
 
-Pronóstico de demanda de bicicletas por estación y hora (MiBici GDL)
+<p align="center"><b>Tecnológico de Monterrey</b> · MLOps (TC5061) · Equipo 1</p>
+
+Pronóstico de demanda de bicicletas por estación y por hora con los
+[datos abiertos de MiBici Guadalajara](https://mibici.net/en/open-data/). El objetivo es
+anticipar qué estaciones van a quedar vacías o llenas para rebalancear bicicletas a tiempo.
+
+## Equipo
+
+| Integrante | Matrícula | Rol | GitHub |
+|---|---|---|---|
+| José Luis Lorenzo Augusto Galíndez Vences | A01105695 | Data Engineer / Líder técnico | [@LUISG47](https://github.com/LUISG47) |
+| Dante Andreas Cosgaya Morán | A01370354 | Data Scientist | [@dacosgaya](https://github.com/dacosgaya) |
+| Héctor Calderón Pérez | A01797600 | Data Scientist / ML Engineer | [@hector-calderon](https://github.com/hector-calderon) |
+| Arturo Alejandro Flores Amaro | A01797429 | ML / Software Engineer | (pendiente) |
+
+## Pipeline
+
+```mermaid
+flowchart LR
+    A["Datos abiertos MiBici<br/>mibici.net"] -->|"descarga<br/>mibici/dataset.py"| B[("data/raw")]
+    B -->|"DataCleaner<br/>mibici/cleaning.py"| C[("data/interim<br/>mibici_interim_v1")]
+    C -->|"features<br/>mibici/features.py"| D[("data/processed<br/>mibici_processed_v1")]
+    B -.->|"mibici_raw_v1"| M{{"MLflow · experimento mibici-fase1"}}
+    C -.->|"mibici_interim_v1"| M
+    D -.->|"mibici_processed_v1"| M
+```
+
+Cada versión del dataset queda registrada en MLflow con su esquema, número de filas, *digest*
+y los tags `git_commit` y `fuente_datos`, que la ligan al código y a la fuente que la generaron.
+
+## Avance Fase 1
+
+Entrega: 25 de octubre de 2026.
+
+- [x] Estructura del proyecto con Cookiecutter Data Science
+- [x] Ingesta de datos abiertos (`mibici/dataset.py`)
+- [x] Diagnóstico de datos crudos (`notebooks/0.1-lg-diagnostico-raw.ipynb`, `reports/diagnostico_raw.md`)
+- [x] Limpieza con `DataCleaner` y versionado de datos con MLflow (#4)
+- [ ] EDA (#5)
+- [ ] Preprocesamiento y `mibici_processed_v1` (#6)
+- [ ] Refactor POO y pruebas (#7)
+- [ ] Reporte PDF Fase 1 (#8)
+
+Para colaborar, revisa [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ## Instalación
 
