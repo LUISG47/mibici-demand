@@ -38,6 +38,44 @@ make data
 - Las carpetas de `data/` se crean solas la primera vez (`mibici/config.py`).
 - También se puede usar desde Python: `from mibici.dataset import descargar_meses`.
 
+## Limpieza y versionado de datos con MLflow
+
+```bash
+python -m mibici.cleaning                                  # limpia y registra en MLflow
+mlflow ui --backend-store-uri sqlite:///$PWD/mlflow.db     # abrir http://127.0.0.1:5000
+```
+
+El script lee todos los CSV de `data/raw/`, aplica la clase `DataCleaner` (`mibici/cleaning.py`)
+y guarda el resultado en `data/interim/viajes_limpios.parquet`. Todo queda en el experimento
+**`mibici-fase1`** de MLflow (base `mlflow.db` y artefactos en `mlruns/`, ambos fuera de Git):
+
+- Dataset crudo **`mibici_raw_v1`** (`context="raw"`) y dataset limpio **`mibici_interim_v1`**
+  (`context="interim"`), con su esquema, número de filas y *digest* para detectar cambios.
+- Parámetros: meses procesados y filas antes y después.
+- Artefacto `bitacora_limpieza.csv`: por cada regla, filas antes, después y afectadas.
+
+### Reglas, en el orden en que se aplican
+
+Los números vienen del diagnóstico (`reports/diagnostico_raw.md`). En la lectura, cada archivo
+se abre como UTF-8 y, si falla, como Latin-1 (caso de 2026-01).
+
+| # | Regla (método) | Qué hace | Por qué |
+|---|---|---|---|
+| 1 | `eliminar_duplicados` | Quita filas idénticas | 758 filas repetidas en 2026-09; contarían doble la demanda |
+| 2 | `parsear_fechas` | Inicio y fin a datetime, agrega `duracion_min` | Las reglas de duración y el conteo por hora lo necesitan |
+| 3 | `eliminar_duracion_cero` | Quita viajes de 0 segundos | Terminan en el mismo instante en que empiezan: no son viajes |
+| 4 | `eliminar_cortos_misma_estacion` | Quita viajes < 1 min con origen = destino | La bici se sacó y se devolvió de inmediato (anclaje fallido o arrepentimiento); no es demanda real |
+| 5 | `eliminar_mas_de_24h` | Quita viajes de más de 24 h | Bicicletas no devueltas o errores de registro (13 viajes, máximo 98 h) |
+| 6 | `marcar_duracion_atipica` | `duracion_atipica = True` si dura de 3 a 24 h | Son raros (p99.9 = 59 min) pero la salida sí ocurrió; se conservan y se pueden excluir en el EDA |
+| 7 | `anio_nacimiento_invalido_a_nulo` | Año < 1920 pasa a nulo | Años imposibles (199, 1420); el viaje es válido, solo el dato del usuario no |
+| 8 | `genero_nulo_a_desconocido` | Género vacío pasa a `"desconocido"` | Conserva los viajes (0.7%) y deja explícita la categoría |
+| 9 | `marcar_estaciones_en_catalogo` | `estacion_en_catalogo = True` si origen y destino están en la nomenclatura | Las estaciones 405 y 407 no están en el catálogo pero tuvieron viajes reales (junio y julio 2026); se conservan |
+
+En las reglas que marcan o corrigen, "filas afectadas" en la bitácora cuenta las filas
+modificadas; en la regla 9 cuenta los viajes **fuera** del catálogo.
+
+Resultado con 2025-10 a 2026-09: **4,497,877 → 4,354,416 viajes** (se elimina el 3.2%).
+
 ## Project Organization
 
 ```
