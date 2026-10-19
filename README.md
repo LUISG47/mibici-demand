@@ -6,6 +6,38 @@
 
 Pronóstico de demanda de bicicletas por estación y hora (MiBici GDL)
 
+## Instalación
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
+```
+
+## Descarga de datos
+
+Los datos vienen de los [datos abiertos de MiBici](https://mibici.net/en/open-data/) y **no se
+suben a Git**. Para bajarlos a `data/raw/` (con el `.venv` activado):
+
+```bash
+# Rango por defecto: 2025-10 a 2026-09
+python mibici/dataset.py
+
+# Otro rango de meses (formato AAAA-MM, ambos inclusive)
+python mibici/dataset.py --inicio 2025-01 --fin 2025-06
+
+# Equivalente con make (usa el rango por defecto)
+make data
+```
+
+- Baja un CSV de viajes por mes (`datos_abiertos_AAAA_MM.csv`) y el CSV de nomenclatura de
+  estaciones (`nomenclatura_AAAA_MM.csv`).
+- Los enlaces se extraen de la página de datos abiertos, porque no siguen un patrón fijo.
+- Omite los archivos que ya están descargados, así que se puede volver a correr sin problema.
+- Avisa en consola qué meses del rango no tienen enlace (por ejemplo, meses aún no publicados).
+- Las carpetas de `data/` se crean solas la primera vez (`mibici/config.py`).
+- También se puede usar desde Python: `from mibici.dataset import descargar_meses`.
+
 ## Project Organization
 
 ```
