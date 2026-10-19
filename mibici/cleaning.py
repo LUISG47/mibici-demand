@@ -4,6 +4,7 @@ Uso:  python -m mibici.cleaning
 """
 
 from pathlib import Path
+import subprocess
 import tempfile
 
 from loguru import logger
@@ -11,7 +12,8 @@ import mlflow
 import pandas as pd
 import typer
 
-from mibici.config import INTERIM_DATA_DIR, RAW_DATA_DIR, configurar_mlflow
+from mibici.config import INTERIM_DATA_DIR, PROJ_ROOT, RAW_DATA_DIR, configurar_mlflow
+from mibici.dataset import URL_DATOS_ABIERTOS
 
 app = typer.Typer()
 
@@ -164,6 +166,25 @@ def cargar_nomenclatura(carpeta: Path = RAW_DATA_DIR) -> pd.DataFrame:
     return DataCleaner.leer_csv(max(carpeta.glob("nomenclatura_*.csv")))
 
 
+def estado_git() -> tuple[str, bool]:
+    """Hash del commit actual y si hay cambios sin commit, para ligar el dataset al código.
+
+    Si el repo tiene cambios sin commit, el hash no describe exactamente el código que corrió.
+    """
+
+    def git(*args):
+        resultado = subprocess.run(
+            ["git", *args], cwd=PROJ_ROOT, capture_output=True, text=True, check=True
+        )
+        return resultado.stdout.strip()
+
+    try:
+        return git("rev-parse", "HEAD"), git("status", "--porcelain") != ""
+    except (OSError, subprocess.CalledProcessError):
+        # Sin git o fuera de un repo (p. ej. código descargado como zip)
+        return "desconocido", True
+
+
 @app.command()
 def main(
     salida: Path = INTERIM_DATA_DIR / "viajes_limpios.parquet",
@@ -173,8 +194,20 @@ def main(
     viajes = cargar_viajes()
     nomenclatura = cargar_nomenclatura()
     meses = sorted(viajes["mes_archivo"].unique())
+    commit, cambios_sin_commit = estado_git()
+    if cambios_sin_commit:
+        logger.warning("Hay cambios sin commit: git_commit no describe exactamente este código")
 
     with mlflow.start_run(run_name="limpieza"):
+        # Liga esta versión de los datos al código que la generó y a su fuente
+        mlflow.set_tags(
+            {
+                "git_commit": commit,
+                "git_cambios_sin_commit": str(cambios_sin_commit).lower(),
+                "fuente_datos": URL_DATOS_ABIERTOS,
+            }
+        )
+
         # Dataset crudo
         raw = mlflow.data.from_pandas(viajes, source=str(RAW_DATA_DIR), name="mibici_raw_v1")
         mlflow.log_input(raw, context="raw")
@@ -187,6 +220,8 @@ def main(
         # Dataset limpio
         interim = mlflow.data.from_pandas(limpios, source=str(salida), name="mibici_interim_v1")
         mlflow.log_input(interim, context="interim")
+        # Copia del parquet limpio en MLflow (el crudo no: se reconstruye con mibici/dataset.py)
+        mlflow.log_artifact(str(salida), artifact_path="datos")
 
         mlflow.log_params(
             {

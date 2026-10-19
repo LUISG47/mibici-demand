@@ -53,6 +53,13 @@ y guarda el resultado en `data/interim/viajes_limpios.parquet`. Todo queda en el
   (`context="interim"`), con su esquema, número de filas y *digest* para detectar cambios.
 - Parámetros: meses procesados y filas antes y después.
 - Artefacto `bitacora_limpieza.csv`: por cada regla, filas antes, después y afectadas.
+- Artefacto `datos/viajes_limpios.parquet`: copia del dataset limpio (~96 MB por corrida). El
+  crudo no se guarda porque se reconstruye con `mibici/dataset.py`.
+- Tags que ligan cada versión de los datos con su origen: `git_commit` (hash del código que la
+  generó), `git_cambios_sin_commit` (`true` si se corrió con cambios sin commit, en cuyo caso
+  el hash no describe exactamente el código) y `fuente_datos` (URL de los datos abiertos).
+
+Para que `git_commit` sea confiable, haz commit de tus cambios **antes** de correr la limpieza.
 
 ### Reglas, en el orden en que se aplican
 
