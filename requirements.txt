@@ -3,6 +3,7 @@ pandas==3.0.6
 scikit-learn==1.9.1
 mlflow==3.17.1
 requests==2.34.2
+pyarrow==25.0.1  # lectura/escritura de parquet (data/interim)
 
 # Visualización (EDA)
 matplotlib==3.11.2
