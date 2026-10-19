@@ -1,0 +1,23 @@
+# Datos y modelado
+pandas==3.0.6
+scikit-learn==1.9.1
+mlflow==3.17.1
+requests==2.34.2
+
+# Visualización (EDA)
+matplotlib==3.11.2
+seaborn==0.13.2
+
+# Utilidades que usa el código base de Cookiecutter DS
+loguru==0.7.3
+python-dotenv==1.2.4
+tqdm==4.70.1
+typer==0.27.3
+
+# Desarrollo: pruebas, lint y plantilla
+pytest==9.1.1
+ruff==0.17.1
+cookiecutter-data-science==2.3.0
+
+# Instala el módulo del proyecto (mibici) en modo editable
+-e .
