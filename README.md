@@ -25,7 +25,7 @@ anticipar qué estaciones van a quedar vacías o llenas para rebalancear bicicle
 | José Luis Lorenzo Augusto Galíndez Vences | A01105695 | Data Engineer / Líder técnico | [@LUISG47](https://github.com/LUISG47) |
 | Dante Andreas Cosgaya Morán | A01370354 | Data Scientist | [@dacosgaya](https://github.com/dacosgaya) |
 | Héctor Calderón Pérez | A01797600 | Data Scientist / ML Engineer | [@hector-calderon](https://github.com/hector-calderon) |
-| Arturo Alejandro Flores Amaro | A01797429 | ML / Software Engineer | (pendiente) |
+| Arturo Alejandro Flores Amaro | A01797429 | ML / Software Engineer | [@ArturoAmaro1801](https://github.com/ArturoAmaro1801) |
 
 ## Pipeline
 
