@@ -12,11 +12,13 @@ El objetivo del preprocesamiento es transformar los registros individuales de vi
 
 Se agruparon los viajes utilizando el identificador de la estación y la fecha y hora correspondiente. Para cada combinación se calcularon las salidas y llegadas de bicicletas.
 
-A partir de 4,354,416 viajes limpios se generaron 3,445,577 registros por estación y hora, conservando los totales originales de salidas y llegadas.
+A partir de 4,354,416 viajes limpios se generaron 3,446,117 registros por estación y hora, conservando los totales originales de salidas y llegadas.
 
 También se incorporaron 1,518,707 registros sin movimientos, mediante la generación de intervalos horarios entre la primera y última actividad observada de cada estación.
 
 **Limitación:** estos intervalos no permiten distinguir completamente entre horas de demanda cero y periodos en los que una estación estuvo temporalmente fuera de operación. La identificación de periodos operativos queda pendiente de información adicional.
+
+En la segunda versión del preprocesamiento, se estableció el 30 de septiembre de 2026 a las 23:00 como límite del periodo. Se excluyeron 15 registros agregados del 1 de octubre, correspondientes a 16 llegadas. Además, se extendieron los intervalos horarios de las estaciones con actividad desde el 29 de septiembre hasta el cierre del periodo. Las cuatro estaciones cuya última actividad ocurrió antes de esa fecha conservaron su intervalo original, debido a la posibilidad de que hubieran dejado de operar.
 
 ## 3. Ingeniería de variables
 
@@ -48,6 +50,8 @@ Debido a que `estacion_id` representa una categoría y no una magnitud numérica
 El codificador se ajustó exclusivamente con los datos del periodo de entrenamiento, identificando 455 estaciones, y se guardó en `data/processed/codificador_estaciones.pkl`.
 
 La codificación One-Hot no se materializó dentro del archivo Parquet. El transformador quedó preparado para aplicarse durante la construcción de la matriz de características del modelo, evitando incorporar cientos de columnas adicionales en esta fase.
+
+Se identificaron 16 estaciones que aparecen únicamente después del corte de entrenamiento del 1 de agosto de 2026. Debido a que el codificador se ajustó exclusivamente con los datos anteriores a esa fecha, estas estaciones no forman parte de las categorías aprendidas y se representan mediante vectores de ceros al aplicar One-Hot Encoding.
 
 ## 6. Reducción de dimensionalidad
 

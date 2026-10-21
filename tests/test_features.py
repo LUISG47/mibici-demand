@@ -79,3 +79,51 @@ def test_codificacion_estaciones():
 
     assert transformado.shape == (1, 2)
     assert transformado.nnz == 0
+
+
+def test_cierre_periodo_y_extension_horaria():
+    """Verifica el cierre del periodo y las horas sin movimientos."""
+
+    viajes = pd.DataFrame(
+        {
+            "Origen_Id": [1, 1, 2],
+            "Destino_Id": [1, 1, 2],
+            "Inicio_del_viaje": pd.to_datetime(
+                [
+                    "2026-09-30 21:10:00",
+                    "2026-09-30 22:20:00",
+                    "2026-09-28 08:10:00",
+                ]
+            ),
+            "Fin_del_viaje": pd.to_datetime(
+                [
+                    "2026-09-30 21:30:00",
+                    "2026-10-01 00:15:00",
+                    "2026-09-28 08:30:00",
+                ]
+            ),
+        }
+    )
+
+    resultado = generar_dataset_estacion_hora(viajes)
+
+    # No deben existir registros posteriores a septiembre
+    fin_periodo = pd.Timestamp("2026-09-30 23:00:00")
+    assert resultado["fecha_hora"].max() == fin_periodo
+    assert (resultado["fecha_hora"] <= fin_periodo).all()
+
+    # Estación activa: extender hasta las 23:00
+    estacion_activa = resultado[resultado["estacion_id"] == 1].set_index("fecha_hora")
+
+    assert fin_periodo in estacion_activa.index
+    assert estacion_activa.loc[fin_periodo, "salidas"] == 0
+    assert estacion_activa.loc[fin_periodo, "llegadas"] == 0
+
+    # Estación inactiva antes del 29: no extender
+    estacion_inactiva = resultado[resultado["estacion_id"] == 2]
+
+    assert estacion_inactiva["fecha_hora"].max() == pd.Timestamp("2026-09-28 08:00:00")
+
+    # Las salidas se conservan y la llegada de octubre se excluye
+    assert resultado["salidas"].sum() == 3
+    assert resultado["llegadas"].sum() == 2
