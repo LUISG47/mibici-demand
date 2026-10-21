@@ -16,6 +16,11 @@ from mibici.dataset import URL_DATOS_ABIERTOS
 
 app = typer.Typer()
 
+# Fechas utilizadas en el preprocesamiento
+FECHA_CORTE = pd.Timestamp("2026-08-01")
+FIN_PERIODO = pd.Timestamp("2026-09-30 23:00:00")
+INICIO_EXTENSION = pd.Timestamp("2026-09-29 00:00:00")
+
 
 def contar_eventos(estaciones, fechas, nombre):
     """Cuenta eventos por estación y hora."""
@@ -60,13 +65,26 @@ def generar_dataset_estacion_hora(viajes):
     # Unir ambos conteos
     conteos = pd.concat([salidas, llegadas], axis=1).fillna(0).astype("int32").reset_index()
 
+    # Excluir movimientos registrados fuera del periodo
+    conteos = conteos[conteos["fecha_hora"] <= FIN_PERIODO].copy()
+
     # Incorporar horas sin viajes para cada estación
     bloques = []
 
     for estacion, grupo in conteos.groupby("estacion_id"):
+        primera_actividad = grupo["fecha_hora"].min()
+        ultima_actividad = grupo["fecha_hora"].max()
+
+        # Extender las estaciones con actividad desde el 29 de septiembre
+        # Las que dejaron de operar antes conservan su último registro
+        if ultima_actividad >= INICIO_EXTENSION:
+            fin_malla = FIN_PERIODO
+        else:
+            fin_malla = ultima_actividad
+
         horas = pd.date_range(
-            start=grupo["fecha_hora"].min(),
-            end=grupo["fecha_hora"].max(),
+            start=primera_actividad,
+            end=fin_malla,
             freq="h",
         )
 
@@ -152,8 +170,7 @@ def normalizar_variables_historicas(datos: pd.DataFrame):
     resultado = datos.copy()
 
     # Entrenamiento: fechas anteriores a agosto de 2026
-    fecha_corte = pd.Timestamp("2026-08-01")
-    entrenamiento = resultado["fecha_hora"] < fecha_corte
+    entrenamiento = resultado["fecha_hora"] < FECHA_CORTE
 
     if not entrenamiento.any():
         raise ValueError("No hay registros para entrenar el escalador.")
@@ -185,9 +202,10 @@ def normalizar_variables_historicas(datos: pd.DataFrame):
 def crear_codificador_estaciones(datos: pd.DataFrame):
     """Prepara la codificación de estaciones con datos de entrenamiento."""
 
-    fecha_corte = pd.Timestamp("2026-08-01")
-
-    entrenamiento = datos.loc[datos["fecha_hora"] < fecha_corte, ["estacion_id"]]
+    entrenamiento = datos.loc[
+        datos["fecha_hora"] < FECHA_CORTE,
+        ["estacion_id"],
+    ]
 
     if entrenamiento.empty:
         raise ValueError("No hay estaciones en entrenamiento.")
@@ -239,7 +257,7 @@ def main(
             {
                 "escalador": escalador,
                 "medianas": medianas,
-                "fecha_corte": "2026-08-01",
+                "fecha_corte": str(FECHA_CORTE.date()),
             },
             archivo,
         )
@@ -257,12 +275,21 @@ def main(
 
     logger.info(f"Codificador guardado en: {ruta_codificador}")
 
+    # Contabilizar llegadas dentro del periodo
+    llegadas_validas = int((viajes["Fin_del_viaje"].dt.floor("h") <= FIN_PERIODO).sum())
+
+    llegadas_fuera_periodo = len(viajes) - llegadas_validas
+
+    # Validar resultados antes de guardar el dataset
+    assert procesados["salidas"].sum() == len(viajes)
+    assert procesados["llegadas"].sum() == llegadas_validas
+    assert procesados["fecha_hora"].max() <= FIN_PERIODO
+
+    logger.info(f"Llegadas fuera del periodo: {llegadas_fuera_periodo:,}")
+
+    # Guardar los datos después de validar
     output_path.parent.mkdir(parents=True, exist_ok=True)
     procesados.to_parquet(output_path, index=False)
-
-    # Verificar que no se perdieron eventos durante la agregación
-    assert procesados["salidas"].sum() == len(viajes)
-    assert procesados["llegadas"].sum() == len(viajes)
 
     logger.success(f"Dataset generado: {len(procesados):,} registros")
 
@@ -283,7 +310,7 @@ def main(
         )
 
     # Registrar el dataset procesado en MLflow
-    with mlflow.start_run(run_name="preprocesamiento"):
+    with mlflow.start_run(run_name="preprocesamiento_v2"):
         mlflow.set_tags(
             {
                 "git_commit": commit,
@@ -292,11 +319,25 @@ def main(
             }
         )
 
+        # Registrar el dataset limpio como entrada del preprocesamiento
+        viajes_limpios = pd.read_parquet(input_path)
+
+        dataset_interim = mlflow.data.from_pandas(
+            viajes_limpios,
+            source=str(input_path),
+            name="mibici_interim_v1",
+        )
+
+        mlflow.log_input(dataset_interim, context="interim")
+
+        # Liberar memoria después del registro
+        del viajes_limpios
+
         # Registrar la versión del dataset
         dataset = mlflow.data.from_pandas(
             procesados,
             source=str(output_path),
-            name="mibici_processed_v1",
+            name="mibici_processed_v2",
         )
 
         mlflow.log_input(dataset, context="processed")
@@ -307,7 +348,7 @@ def main(
                 "filas_procesadas": len(procesados),
                 "estaciones_entrenamiento": len(codificador.categories_[0]),
                 "lags": "1,24,168",
-                "fecha_corte_entrenamiento": "2026-08-01",
+                "fecha_corte_entrenamiento": str(FECHA_CORTE.date()),
             }
         )
 
@@ -327,7 +368,7 @@ def main(
             artifact_path="transformadores",
         )
 
-    logger.success("Dataset mibici_processed_v1 registrado en MLflow.")
+    logger.success("Dataset mibici_processed_v2 registrado en MLflow.")
 
 
 if __name__ == "__main__":
