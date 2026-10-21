@@ -12,9 +12,9 @@ El objetivo del preprocesamiento es transformar los registros individuales de vi
 
 Se agruparon los viajes utilizando el identificador de la estación y la fecha y hora correspondiente. Para cada combinación se calcularon las salidas y llegadas de bicicletas.
 
-A partir de 4,354,416 viajes limpios se generaron 3,446,117 registros por estación y hora, conservando los totales originales de salidas y llegadas.
+A partir de 4,354,416 viajes limpios se generaron 3,446,117 registros por estación y hora. Se conservaron las 4,354,416 salidas, mientras que las llegadas sumaron 4,354,400 debido a la exclusión de 16 llegadas posteriores al cierre del periodo.
 
-También se incorporaron 1,518,707 registros sin movimientos, mediante la generación de intervalos horarios entre la primera y última actividad observada de cada estación.
+También se incorporaron 1,519,262 registros sin movimientos, mediante la generación de intervalos horarios entre la primera y última actividad observada de cada estación.
 
 **Limitación:** estos intervalos no permiten distinguir completamente entre horas de demanda cero y periodos en los que una estación estuvo temporalmente fuera de operación. La identificación de periodos operativos queda pendiente de información adicional.
 
@@ -63,19 +63,19 @@ La posible eliminación o reducción de características se evaluará después d
 
 ## 7. Versionado y trazabilidad
 
-El dataset procesado se registró en el experimento `mibici-fase1` de MLflow con el nombre `mibici_processed_v1` y el contexto `processed`.
+El preprocesamiento se registró en el experimento mibici-fase1 de MLflow, generando la nueva versión mibici_processed_v2 con el contexto processed, sin sobrescribir mibici_processed_v1, que se conserva como versión anterior.
 
-El registro incluye parámetros del preprocesamiento, esquema, digest del dataset, archivo Parquet y transformadores utilizados.
+Para garantizar la trazabilidad de los datos, se incorporó el registro de mibici_interim_v1 con el contexto interim, permitiendo identificar el conjunto de datos limpios utilizado como entrada del preprocesamiento.
 
-Se incorporaron los tags `git_commit`, `git_cambios_sin_commit` y `fuente_datos`, siguiendo el patrón de versionado implementado en `mibici/cleaning.py`.
+La ejecución preprocesamiento_v2 contiene ambos datasets, sus identificadores digest, parámetros del procesamiento, esquema de datos y los artefactos generados, incluyendo el archivo Parquet procesado, el escalador y el codificador de estaciones.
 
-Los datos y artefactos locales no se suben a GitHub; únicamente se versionan los scripts, pruebas y documentación.
+Además, se registraron los tags git_commit, git_cambios_sin_commit y fuente_datos, permitiendo relacionar los resultados con la versión del código fuente y el origen de los datos utilizados.
 
 ## 8. Validación
 
 La implementación fue revisada mediante Ruff y pruebas automatizadas con Pytest.
 
-Se obtuvieron ocho pruebas aprobadas: cinco correspondientes a limpieza y tres al preprocesamiento.
+Se obtuvieron nueve pruebas aprobadas: cinco correspondientes a limpieza y cuatro al preprocesamiento.
 
 Las pruebas de preprocesamiento verifican la agregación de viajes, los registros sin movimientos, la normalización sin utilizar estadísticas del periodo posterior y el manejo de estaciones desconocidas durante la codificación.
 
