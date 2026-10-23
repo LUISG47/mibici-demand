@@ -8,17 +8,20 @@ El objetivo del preprocesamiento es transformar los registros individuales de vi
 
 **Salida:** `data/processed/estacion_hora.parquet`
 
+
 ## 2. Agregación por estación y hora
 
 Se agruparon los viajes utilizando el identificador de la estación y la fecha y hora correspondiente. Para cada combinación se calcularon las salidas y llegadas de bicicletas.
 
 A partir de 4,354,416 viajes limpios se generaron 3,446,117 registros por estación y hora. Se conservaron las 4,354,416 salidas, mientras que las llegadas sumaron 4,354,400 debido a la exclusión de 16 llegadas posteriores al cierre del periodo.
 
-También se incorporaron 1,519,262 registros sin movimientos, mediante la generación de intervalos horarios entre la primera y última actividad observada de cada estación.
+También se incorporaron 1,519,262 registros sin movimientos mediante la generación de una malla horaria por estación. Esta comienza en la primera actividad observada y, para las estaciones con actividad reciente, se extiende hasta el 30 de septiembre de 2026 a las 23:00.
 
-**Limitación:** estos intervalos no permiten distinguir completamente entre horas de demanda cero y periodos en los que una estación estuvo temporalmente fuera de operación. La identificación de periodos operativos queda pendiente de información adicional.
+En la segunda versión del preprocesamiento se eliminaron 15 registros estación-hora del 1 de octubre de 2026, correspondientes a 16 llegadas. Además, se agregaron 555 horas sin movimientos en 302 estaciones para completar el periodo establecido.
 
-En la segunda versión del preprocesamiento, se estableció el 30 de septiembre de 2026 a las 23:00 como límite del periodo. Se excluyeron 15 registros agregados del 1 de octubre, correspondientes a 16 llegadas. Además, se extendieron los intervalos horarios de las estaciones con actividad desde el 29 de septiembre hasta el cierre del periodo. Las cuatro estaciones cuya última actividad ocurrió antes de esa fecha conservaron su intervalo original, debido a la posibilidad de que hubieran dejado de operar.
+Se decidió no extender las cuatro estaciones cuya última actividad ocurrió antes del 29 de septiembre, debido a la posibilidad de que hubieran dejado de operar. Entre ellas se encuentra la estación 465, cuya actividad terminó el 28 de septiembre a las 22:00, solamente 49 horas antes del cierre del periodo. Este caso requiere especial atención, ya que también podría deberse a una baja demanda y no necesariamente al cierre de la estación.
+
+**Limitación:** la ausencia de viajes no permite distinguir completamente entre periodos de demanda cero y estaciones temporalmente fuera de operación. Para confirmar estos casos sería necesario contar con información adicional sobre el estado operativo de las estaciones.
 
 ## 3. Ingeniería de variables
 
@@ -61,15 +64,18 @@ Se decidió conservar las variables temporales e históricas para evaluar poster
 
 La posible eliminación o reducción de características se evaluará después del EDA y de las pruebas de entrenamiento, cuando exista evidencia para determinar cuáles aportan información útil.
 
+
 ## 7. Versionado y trazabilidad
 
-El preprocesamiento se registró en el experimento mibici-fase1 de MLflow, generando la nueva versión mibici_processed_v2 con el contexto processed, sin sobrescribir mibici_processed_v1, que se conserva como versión anterior.
+El preprocesamiento se registró en el experimento `mibici-fase1` de MLflow, generando la nueva versión `mibici_processed_v2` con el contexto `processed`, sin sobrescribir `mibici_processed_v1`, que se conserva como versión anterior.
 
-Para garantizar la trazabilidad de los datos, se incorporó el registro de mibici_interim_v1 con el contexto interim, permitiendo identificar el conjunto de datos limpios utilizado como entrada del preprocesamiento.
+Para garantizar la trazabilidad de los datos, se incorporó el registro de `mibici_interim_v1` con el contexto `interim`, permitiendo identificar el conjunto de datos limpios utilizado como entrada del preprocesamiento.
 
-La ejecución preprocesamiento_v2 contiene ambos datasets, sus identificadores digest, parámetros del procesamiento, esquema de datos y los artefactos generados, incluyendo el archivo Parquet procesado, el escalador y el codificador de estaciones.
+La ejecución `preprocesamiento_v2` contiene ambos datasets, sus identificadores *digest*, parámetros del procesamiento, esquema de datos y los artefactos generados, incluyendo el archivo Parquet procesado, el escalador y el codificador de estaciones.
 
-Además, se registraron los tags git_commit, git_cambios_sin_commit y fuente_datos, permitiendo relacionar los resultados con la versión del código fuente y el origen de los datos utilizados.
+Además, se registraron los tags `git_commit`, `git_cambios_sin_commit` y `fuente_datos`, siguiendo el patrón de versionado implementado en `mibici/cleaning.py`. Esto permite relacionar los resultados con la versión del código fuente y el origen de los datos utilizados.
+
+Los datos y artefactos locales no se suben a GitHub; únicamente se versionan los scripts, las pruebas automatizadas y la documentación técnica.
 
 ## 8. Validación
 
