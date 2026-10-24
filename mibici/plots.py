@@ -8,16 +8,16 @@ import pandas as pd
 import seaborn as sns
 import typer
 
-from mibici.config import FIGURES_DIR, PROCESSED_DATA_DIR
+from mibici.config import FIGURES_DIR, INTERIM_DATA_DIR
 
 app = typer.Typer()
 
 
-def plot_missing_values(
+def graficar_valores_nulos(
     df: pd.DataFrame, title: str = "Porcentaje de Valores Nulos por Columna"
 ) -> plt.Figure:
     """
-    Genera un gráfico de barras con el porcentaje de nulos por columna
+    Genera un gráfico de barras con el porcentaje de nulos por columna.
     """
     null_pct = (df.isna().mean() * 100).sort_values(ascending=False)
     fig, ax = plt.subplots(figsize=(8, 4))
@@ -38,7 +38,7 @@ def plot_missing_values(
     return fig
 
 
-def plot_trip_duration_distribution(
+def graficar_distribucion_duracion_viajes(
     durations_minutes: pd.Series,
     max_cutoff: float = 60.0,
     title: str = "Distribución de Duración de Viajes (min)",
@@ -57,7 +57,7 @@ def plot_trip_duration_distribution(
     return fig
 
 
-def plot_monthly_trip_counts(
+def graficar_viajes_mensuales(
     monthly_counts: pd.Series, title: str = "Volumen Total de Viajes por Mes"
 ) -> plt.Figure:
     """
@@ -74,7 +74,7 @@ def plot_monthly_trip_counts(
     return fig
 
 
-def plot_gender_distribution(
+def graficar_distribucion_genero(
     gender_counts: pd.Series, title: str = "Distribución de Viajes por Género"
 ) -> plt.Figure:
     """
@@ -93,7 +93,7 @@ def plot_gender_distribution(
 
 @app.command()
 def main(
-    input_path: Path = PROCESSED_DATA_DIR / "mibici_processed.parquet",
+    input_path: Path = INTERIM_DATA_DIR / "viajes_limpios.parquet",
     output_dir: Path = FIGURES_DIR,
 ):
     """
@@ -107,8 +107,8 @@ def main(
         return
 
     df = pd.read_parquet(input_path)
-    fig_missing = plot_missing_values(df)
-    fig_missing.savefig(output_dir / "missing_values.png")
+    fig_missing = graficar_valores_nulos(df)
+    fig_missing.savefig(output_dir / "valores_nulos.png")
     logger.success(f"Figuras guardadas exitosamente en {output_dir}")
 
 
