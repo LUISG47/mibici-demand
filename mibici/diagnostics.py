@@ -2,51 +2,48 @@
 Módulo de diagnóstico para datos crudos de MiBici.
 """
 
-from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
 
 import pandas as pd
 
 
-@dataclass
-class DiagnosticConfig:
-    min_year_valid: int = 1920
-    max_duration_hours: int = 3
-    date_format: str = "%Y-%m-%d %H:%M:%S"
-
-
 class RawDataDiagnoser:
     """
-    Diagnostica la integridad, tipos y calidad de los datos crudos.
+    Diagnostica la integridad, tipos y calidad de los datos crudos de MiBici.
     """
 
-    def __init__(self, config: DiagnosticConfig | None = None):
-        self.config = config or DiagnosticConfig()
+    DURACION_CORTA_MIN = 1.0
+    DURACION_ATIPICA_MIN = 3 * 60  # > 3 h
+    DURACION_MAXIMA_MIN = 24 * 60  # > 24 h
+    ANIO_NACIMIENTO_MINIMO = 1920
+
+    def __init__(
+        self,
+        viajes: pd.DataFrame,
+        nomenclatura: pd.DataFrame | None = None,
+    ):
+        self.df = viajes
+        self.nomenclatura = nomenclatura
+        self.resultados: dict[str, Any] = {}
 
     @staticmethod
-    def extract_month_from_path(path: Path) -> str:
-        """
-        Extrae el mes 'YYYY-MM' del nombre de archivo 'datos_abiertos_YYYY_MM.csv'.
-        """
-        return path.stem.removeprefix("datos_abiertos_").replace("_", "-")
+    def extraer_mes_de_ruta(ruta: Path) -> str:
+        """Extrae el mes 'YYYY-MM' del nombre de archivo 'datos_abiertos_YYYY_MM.csv'."""
+        return ruta.stem.removeprefix("datos_abiertos_").replace("_", "-")
 
     @staticmethod
-    def detect_encoding(path: Path) -> str:
-        """
-        Determina si un archivo es UTF-8 o requiere Latin-1.
-        """
+    def detectar_codificacion(ruta: Path) -> str:
+        """Determina si un archivo es UTF-8 o requiere Latin-1."""
         try:
-            path.read_bytes().decode("utf-8")
+            ruta.read_bytes().decode("utf-8")
             return "utf-8"
         except UnicodeDecodeError:
             return "latin-1"
 
     @staticmethod
-    def dataframe_to_markdown(df: pd.DataFrame) -> str:
-        """
-        Genera una tabla Markdown pura a partir de un DataFrame sin dependencias externas.
-        """
+    def dataframe_a_markdown(df: pd.DataFrame) -> str:
+        """Genera una tabla Markdown pura a partir de un DataFrame sin dependencias externas."""
 
         def _fmt(val: Any) -> str:
             if isinstance(val, bool):
@@ -59,74 +56,151 @@ class RawDataDiagnoser:
 
         header = "| " + " | ".join(map(str, df.columns)) + " |"
         sep = "|" + "---|" * len(df.columns)
-        rows = [
-            "| " + " | ".join(_fmt(v) for v in row) + " |"
-            for row in df.astype(object).itertuples(index=False)
+        filas = [
+            "| " + " | ".join(_fmt(v) for v in fila) + " |"
+            for fila in df.astype(object).itertuples(index=False)
         ]
-        return "\n".join([header, sep, *rows])
+        return "\n".join([header, sep, *filas])
 
-    def compute_duration_metrics(self, df: pd.DataFrame) -> dict[str, pd.DataFrame]:
-        """
-        Calcula conteos y percentiles de la duración de viajes.
-        """
-        duration = (df["Fin_del_viaje"] - df["Inicio_del_viaje"]).dt.total_seconds() / 60
-        same_station = df["Origen_Id"] == df["Destino_Id"]
-
-        counts = pd.Series(
+    def diagnosticar_valores_nulos(self) -> pd.DataFrame:
+        """Calcula conteos y porcentajes de valores nulos por columna."""
+        total = max(len(self.df), 1)
+        nulos = self.df.isna().sum()
+        resumen = pd.DataFrame(
             {
-                "negativa": (duration < 0).sum(),
-                "cero": (duration == 0).sum(),
-                "mayor a 0 y menor a 1 min": ((duration > 0) & (duration < 1)).sum(),
-                "menor a 1 min y misma estación": (
-                    (duration > 0) & (duration < 1) & same_station
+                "columna": nulos.index,
+                "nulos": nulos.values,
+                "porcentaje": (nulos.values / total * 100).round(2),
+            }
+        ).sort_values("nulos", ascending=False)
+        self.resultados["nulos"] = resumen
+        return resumen
+
+    def diagnosticar_duplicados(self) -> int:
+        """Conteo de filas idénticas en el conjunto de datos."""
+        conteo = int(self.df.duplicated().sum())
+        self.resultados["duplicados"] = conteo
+        return conteo
+
+    def diagnosticar_rango_fechas(self) -> dict[str, Any]:
+        """Obtiene la fecha mínima, máxima y meses cubiertos."""
+        inicio = pd.to_datetime(self.df["Inicio_del_viaje"])
+        fin = pd.to_datetime(self.df["Fin_del_viaje"])
+        resumen = {
+            "fecha_minima": inicio.min(),
+            "fecha_maxima": fin.max(),
+            "total_dias": (fin.max() - inicio.min()).days if not inicio.empty else 0,
+        }
+        self.resultados["rango_fechas"] = resumen
+        return resumen
+
+    def diagnosticar_edad_y_genero(self) -> dict[str, Any]:
+        """Audita años de nacimiento inválidos y distribución por género."""
+        conteo_genero = self.df["Genero"].value_counts(dropna=False)
+
+        anios = self.df["Año_de_nacimiento"].dropna()
+        invalidos = (anios < self.ANIO_NACIMIENTO_MINIMO).sum()
+
+        resumen = {
+            "distribucion_genero": conteo_genero,
+            "anios_invalidos": int(invalidos),
+            "anio_minimo": float(anios.min()) if not anios.empty else None,
+            "anio_maximo": float(anios.max()) if not anios.empty else None,
+        }
+        self.resultados["demograficos"] = resumen
+        return resumen
+
+    def computar_metricas_de_duracion(
+        self, df: pd.DataFrame | None = None
+    ) -> dict[str, pd.DataFrame]:
+        """Calcula conteos y percentiles de la duración de viajes."""
+        datos = self.df if df is None else df
+        inicio = pd.to_datetime(datos["Inicio_del_viaje"])
+        fin = pd.to_datetime(datos["Fin_del_viaje"])
+        duracion = (fin - inicio).dt.total_seconds() / 60
+        misma_estacion = datos["Origen_Id"] == datos["Destino_Id"]
+
+        conteos = pd.Series(
+            {
+                "negativa": (duracion < 0).sum(),
+                "cero": (duracion == 0).sum(),
+                "mayor a 0 y menor a 1 min": (
+                    (duracion > 0) & (duracion < self.DURACION_CORTA_MIN)
                 ).sum(),
-                "mayor a 1 h": (duration > 60).sum(),
-                "mayor a 3 h": (duration > 180).sum(),
-                "mayor a 24 h": (duration > 1440).sum(),
+                "menor a 1 min y misma estación": (
+                    (duracion < self.DURACION_CORTA_MIN) & misma_estacion
+                ).sum(),
+                "mayor a 1 h": (duracion > 60).sum(),
+                "mayor a 3 h": (duracion > self.DURACION_ATIPICA_MIN).sum(),
+                "mayor a 24 h": (duracion > self.DURACION_MAXIMA_MIN).sum(),
             },
             name="viajes",
         ).to_frame()
-        total_rows = max(len(df), 1)
-        counts["porcentaje"] = (counts["viajes"] / total_rows * 100).round(3)
+
+        total_filas = max(len(datos), 1)
+        conteos["porcentaje"] = (conteos["viajes"] / total_filas * 100).round(3)
 
         percentiles = (
-            duration.quantile([0.5, 0.9, 0.95, 0.99, 0.999])
+            duracion.quantile([0.5, 0.9, 0.95, 0.99, 0.999])
             .rename(lambda p: f"p{p * 100:g}")
             .to_frame("minutos")
         )
-        percentiles.loc["máximo"] = duration.max() if not duration.empty else 0.0
+        percentiles.loc["máximo"] = duracion.max() if not duracion.empty else 0.0
 
-        return {"counts": counts, "percentiles": percentiles.round(2)}
+        resumen = {"counts": conteos, "percentiles": percentiles.round(2)}
+        self.resultados["duracion"] = resumen
+        return resumen
 
-    def check_station_consistency(
-        self, df_trips: pd.DataFrame, df_nomenclature: pd.DataFrame
+    def revisar_consistencia_de_estaciones(
+        self,
+        df_viajes: pd.DataFrame | None = None,
+        df_nomenclatura: pd.DataFrame | None = None,
     ) -> dict[str, Any]:
-        """
-        Contrasta IDs de origen/destino contra la nomenclatura disponible.
-        """
-        valid_ids = set(df_nomenclature["id"].dropna().unique())
-        missing_origin = df_trips.loc[~df_trips["Origen_Id"].isin(valid_ids), "Origen_Id"]
-        missing_dest = df_trips.loc[~df_trips["Destino_Id"].isin(valid_ids), "Destino_Id"]
+        """Contrasta IDs de origen/destino contra la nomenclatura disponible."""
+        viajes = self.df if df_viajes is None else df_viajes
+        nomenclatura = self.nomenclatura if df_nomenclatura is None else df_nomenclatura
 
-        missing_summary = (
+        if nomenclatura is None:
+            return {}
+
+        ids_validos = set(nomenclatura["id"].dropna().unique())
+        origen_invalido = viajes.loc[~viajes["Origen_Id"].isin(ids_validos), "Origen_Id"]
+        destino_invalido = viajes.loc[~viajes["Destino_Id"].isin(ids_validos), "Destino_Id"]
+
+        resumen_faltantes = (
             pd.DataFrame(
                 {
-                    "viajes_como_origen": missing_origin.value_counts(),
-                    "viajes_como_destino": missing_dest.value_counts(),
+                    "viajes_como_origen": origen_invalido.value_counts(),
+                    "viajes_como_destino": destino_invalido.value_counts(),
                 }
             )
             .fillna(0)
             .astype(int)
             .sort_index()
         )
-        missing_summary.index.name = "estacion_id"
+        resumen_faltantes.index.name = "estacion_id"
 
-        used_ids = set(df_trips["Origen_Id"].dropna().unique()) | set(
-            df_trips["Destino_Id"].dropna().unique()
+        ids_usados = set(viajes["Origen_Id"].dropna().unique()) | set(
+            viajes["Destino_Id"].dropna().unique()
         )
-        unused_stations = df_nomenclature[~df_nomenclature["id"].isin(used_ids)]
+        estaciones_no_usadas = nomenclatura[~nomenclatura["id"].isin(ids_usados)]
 
-        return {
-            "missing_stations": missing_summary,
-            "unused_stations": unused_stations,
+        resumen = {
+            "missing_stations": resumen_faltantes,
+            "unused_stations": estaciones_no_usadas,
         }
+        self.resultados["estaciones"] = resumen
+        return resumen
+
+    def ejecutar(self) -> dict[str, Any]:
+        """
+        Ejecuta toda la suite de diagnóstico y devuelve el resumen completo.
+        """
+        self.diagnosticar_valores_nulos()
+        self.diagnosticar_duplicados()
+        self.diagnosticar_rango_fechas()
+        self.diagnosticar_edad_y_genero()
+        self.computar_metricas_de_duracion()
+        if self.nomenclatura is not None:
+            self.revisar_consistencia_de_estaciones()
+        return self.resultados

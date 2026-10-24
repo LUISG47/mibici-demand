@@ -4,21 +4,19 @@ Pruebas unitarias para mibici.plots.
 
 import matplotlib
 import pandas as pd
-import pytest
 
 from mibici.plots import (
-    plot_gender_distribution,
-    plot_missing_values,
-    plot_monthly_trip_counts,
-    plot_trip_duration_distribution,
+    graficar_distribucion_duracion_viajes,
+    graficar_distribucion_genero,
+    graficar_valores_nulos,
+    graficar_viajes_mensuales,
 )
 
 # Forzar backend no interactivo para entornos CI/headless
 matplotlib.use("Agg")
 
 
-@pytest.fixture
-def sample_dataframe() -> pd.DataFrame:
+def fixture_dataframe_ejemplo() -> pd.DataFrame:
     """DataFrame sintético con columnas completas y con nulos."""
     return pd.DataFrame(
         {
@@ -30,20 +28,21 @@ def sample_dataframe() -> pd.DataFrame:
     )
 
 
-def test_plot_missing_values(sample_dataframe):
-    fig = plot_missing_values(sample_dataframe)
+def test_graficar_valores_nulos():
+    datos = fixture_dataframe_ejemplo()
+    fig = graficar_valores_nulos(datos)
     assert fig is not None
     assert len(fig.axes) == 1
 
     ax = fig.axes[0]
-    # anio tiene 2 nulos de 5 (40%), debe estar en los ticks del eje Y
-    y_labels = [label.get_text() for label in ax.get_yticklabels()]
-    assert "anio" in y_labels
+    # 'anio' tiene 2 nulos de 5 (40%), debe figurar en las etiquetas del eje Y
+    etiquetas_y = [label.get_text() for label in ax.get_yticklabels()]
+    assert "anio" in etiquetas_y
 
 
-def test_plot_trip_duration_distribution():
-    durations = pd.Series([0.2, 5.0, 10.5, 15.0, 20.0, 45.0, 120.0])
-    fig = plot_trip_duration_distribution(durations, max_cutoff=60.0)
+def test_graficar_distribucion_duracion_viajes():
+    duraciones = pd.Series([0.2, 5.0, 10.5, 15.0, 20.0, 45.0, 120.0])
+    fig = graficar_distribucion_duracion_viajes(duraciones, max_cutoff=60.0)
     assert fig is not None
     assert len(fig.axes) == 1
 
@@ -51,31 +50,31 @@ def test_plot_trip_duration_distribution():
     assert ax.get_title() == "Distribución de Duración de Viajes (min)"
 
 
-def test_plot_monthly_trip_counts():
-    monthly_counts = pd.Series(
+def test_graficar_viajes_mensuales():
+    conteos_mensuales = pd.Series(
         [350000, 420000, 380000],
         index=["2025-10", "2025-11", "2025-12"],
     )
-    fig = plot_monthly_trip_counts(monthly_counts)
+    fig = graficar_viajes_mensuales(conteos_mensuales)
     assert fig is not None
     assert len(fig.axes) == 1
 
     ax = fig.axes[0]
-    x_labels = [label.get_text() for label in ax.get_xticklabels()]
-    assert "2025-10" in x_labels
-    assert len(x_labels) == 3
+    etiquetas_x = [label.get_text() for label in ax.get_xticklabels()]
+    assert "2025-10" in etiquetas_x
+    assert len(etiquetas_x) == 3
 
 
-def test_plot_gender_distribution():
-    gender_series = pd.Series(
+def test_graficar_distribucion_genero():
+    serie_genero = pd.Series(
         [3241248, 1223647, 32982],
         index=["M", "F", "NaN"],
     )
-    fig = plot_gender_distribution(gender_series)
+    fig = graficar_distribucion_genero(serie_genero)
     assert fig is not None
     assert len(fig.axes) == 1
 
     ax = fig.axes[0]
-    x_labels = [label.get_text() for label in ax.get_xticklabels()]
-    assert "M" in x_labels
-    assert "F" in x_labels
+    etiquetas_x = [label.get_text() for label in ax.get_xticklabels()]
+    assert "M" in etiquetas_x
+    assert "F" in etiquetas_x
