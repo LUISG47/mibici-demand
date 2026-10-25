@@ -9,7 +9,7 @@
   <img src="https://img.shields.io/badge/MLflow-3.17-0194E2?logo=mlflow&logoColor=white" alt="MLflow 3.17">
   <a href="https://cookiecutter-data-science.drivendata.org/"><img src="https://img.shields.io/badge/Cookiecutter-Data%20Science-328F97?logo=cookiecutter&logoColor=white" alt="Cookiecutter Data Science"></a>
   <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-yellow" alt="Licencia MIT"></a>
-  <img src="https://img.shields.io/badge/Fase%201-en%20progreso-orange" alt="Fase 1 · en progreso">
+  <img src="https://img.shields.io/badge/Fase%201-completada-brightgreen" alt="Fase 1 · completada">
 </p>
 
 <p align="center"><b>Tecnológico de Monterrey</b> · MLOps (TC5061) · Equipo 1</p>
@@ -42,6 +42,10 @@ flowchart LR
 Cada versión del dataset queda registrada en MLflow con su esquema, número de filas, *digest*
 y los tags `git_commit` y `fuente_datos`, que la ligan al código y a la fuente que la generaron.
 
+```bash
+python -m mibici.features
+```
+
 ## Avance Fase 1
 
 Entrega: 25 de octubre de 2026.
@@ -50,10 +54,10 @@ Entrega: 25 de octubre de 2026.
 - [x] Ingesta de datos abiertos (`mibici/dataset.py`)
 - [x] Diagnóstico de datos crudos (`notebooks/0.1-lg-diagnostico-raw.ipynb`, `reports/diagnostico_raw.md`)
 - [x] Limpieza con `DataCleaner` y versionado de datos con MLflow (#4)
-- [ ] EDA (#5)
-- [ ] Preprocesamiento y `mibici_processed_v1` (#6)
-- [ ] Refactor POO y pruebas (#7)
-- [ ] Reporte PDF Fase 1 (#8)
+- [x] EDA (#14)
+- [x] Preprocesamiento y `mibici_processed_v2` (#11, #13, #16)
+- [x] Refactor POO y pruebas (#15, #17, #18)
+- [x] Reporte PDF Fase 1 (#8)
 
 Para colaborar, revisa [CONTRIBUTING.md](CONTRIBUTING.md).
 
