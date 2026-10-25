@@ -132,8 +132,6 @@ class ViajesEDA:
         )
         return True
 
-    # --- Asegúrate de que los siguientes def estén alineados aquí ---
-
     def obtener_duraciones_visibles(self, quantil: float = 0.99) -> tuple[pd.Series, float, int]:
         """Filtra duraciones hasta el cuantil especificado para descartar outliers visuales."""
         limite = self.viajes["duracion_min"].quantile(quantil)

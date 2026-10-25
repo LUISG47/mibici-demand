@@ -13,7 +13,6 @@ from mibici.config import FIGURES_DIR, INTERIM_DATA_DIR
 app = typer.Typer()
 
 
-@staticmethod
 def graficar_distribucion_duracion_viajes(
     durations_minutes: pd.Series,
     max_cutoff: float = 60.0,
