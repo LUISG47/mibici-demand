@@ -33,10 +33,10 @@ anticipar qué estaciones van a quedar vacías o llenas para rebalancear bicicle
 flowchart LR
     A["Datos abiertos MiBici<br/>mibici.net"] -->|"descarga<br/>mibici/dataset.py"| B[("data/raw")]
     B -->|"DataCleaner<br/>mibici/cleaning.py"| C[("data/interim<br/>mibici_interim_v1")]
-    C -->|"features<br/>mibici/features.py"| D[("data/processed<br/>mibici_processed_v1")]
+    C -->|"features<br/>mibici/features.py"| D[("data/processed<br/>mibici_processed_v2")]
     B -.->|"mibici_raw_v1"| M{{"MLflow · experimento mibici-fase1"}}
     C -.->|"mibici_interim_v1"| M
-    D -.->|"mibici_processed_v1"| M
+    D -.->|"mibici_processed_v2"| M
 ```
 
 Cada versión del dataset queda registrada en MLflow con su esquema, número de filas, *digest*
