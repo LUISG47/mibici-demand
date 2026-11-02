@@ -45,6 +45,18 @@ def configurar_mlflow():
     mlflow.set_experiment(MLFLOW_EXPERIMENT)
 
 
+# Parámetros del proyecto (fechas, umbrales, rezagos, semillas, hiperparámetros, MLflow)
+PARAMS_PATH = PROJ_ROOT / "params.yaml"
+
+
+def cargar_parametros(ruta: Path = PARAMS_PATH) -> dict:
+    """Lee params.yaml y lo regresa como diccionario."""
+    import yaml  # se importa aquí, igual que mlflow, para no hacer lento el import
+
+    with open(ruta, encoding="utf-8") as archivo:
+        return yaml.safe_load(archivo)
+
+
 # If tqdm is installed, configure loguru with tqdm.write
 # https://github.com/Delgan/loguru/issues/135
 try:

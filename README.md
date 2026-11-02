@@ -61,6 +61,33 @@ Entrega: 25 de octubre de 2026.
 
 Para colaborar, revisa [CONTRIBUTING.md](CONTRIBUTING.md).
 
+## Configuración y validación
+
+Los parámetros del proyecto (meses de datos, umbrales de limpieza, horizonte, rezagos,
+meses de prueba, semilla, hiperparámetros y nombres de MLflow) viven en
+[`params.yaml`](params.yaml) y se leen con `cargar_parametros()` de `mibici/config.py`.
+Las rutas se siguen calculando en `config.py`.
+
+La validación es **walk-forward con ventana creciente**: para cada mes de prueba
+(abril a septiembre de 2026) se entrena con todo lo anterior y se evalúa en ese mes, con
+MAE, RMSE y WAPE. Se quita del entrenamiento la última hora antes del mes de prueba,
+porque su objetivo (la siguiente hora) ya cae en la prueba.
+
+```python
+from mibici.modeling.validation import WalkForwardSplitter, evaluar_walk_forward
+from mibici.modeling.tracking import configurar_mlflow, registrar_evaluacion
+
+splitter = WalkForwardSplitter.desde_parametros()  # también sirve como cv= en GridSearchCV
+tabla, resumen = evaluar_walk_forward(pipeline, X, y, splitter)
+
+configurar_mlflow()  # experimento mibici-fase2-modelado
+run_id = registrar_evaluacion("ridge", tabla, resumen, hiperparametros)
+```
+
+En MLflow cada modelo tiene un run padre con las métricas promedio y un run anidado por
+ventana. `registrar_modelo(run_id, ..., alias="champion")` lo registra como
+`mibici-demanda-salidas` y se carga con `models:/mibici-demanda-salidas@champion`.
+
 ## Instalación
 
 ```bash

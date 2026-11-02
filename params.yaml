@@ -1,0 +1,47 @@
+# Parámetros del proyecto mibici-demand.
+# Las rutas NO van aquí: se calculan en mibici/config.py a partir de PROJ_ROOT.
+# Las fechas van entre comillas para que YAML las lea como texto.
+
+datos:
+  mes_inicio: "2025-10"
+  mes_fin: "2026-09"
+
+# Umbrales actuales de DataCleaner (mibici/cleaning.py)
+limpieza:
+  duracion_minima_misma_estacion_min: 1  # menos de 1 min en la misma estación: se elimina
+  duracion_maxima_min: 1440  # más de 24 h: se elimina
+  duracion_atipica_min: 180  # más de 3 h: se marca como atípica
+  anio_nacimiento_minimo: 1920
+
+features:
+  horizonte_horas: 1  # objetivo: salidas de la estación en la siguiente hora
+  rezagos: [1, 24, 168]
+  # Solo la usa la normalización de mibici_processed_v2 (features.py).
+  # Se retirará con la v3: en el walk-forward el escalado se ajusta dentro de cada ventana.
+  fecha_corte: "2026-08-01"
+
+validacion:
+  esquema: ventana_creciente
+  mes_prueba_inicio: "2026-04"
+  mes_prueba_fin: "2026-09"  # 6 ventanas: abril a septiembre de 2026
+
+modelado:
+  semilla: 42
+  # Búsqueda aleatoria para que el ajuste de Gradient Boosting sea viable en una laptop
+  busqueda:
+    tipo: aleatoria
+    n_iter: 8
+  # Nombres de los parámetros del estimador, sin el prefijo del Pipeline
+  hiperparametros:
+    ridge:
+      alpha: [0.1, 1.0, 10.0, 100.0]
+    hist_gradient_boosting:
+      loss: [poisson]
+      learning_rate: [0.05, 0.1]
+      max_iter: [200, 500]
+      max_leaf_nodes: [31, 63]
+      min_samples_leaf: [20, 100]
+
+mlflow:
+  experimento: mibici-fase2-modelado
+  modelo_registrado: mibici-demanda-salidas
