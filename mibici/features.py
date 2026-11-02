@@ -11,8 +11,14 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 import typer
 
 from mibici.cleaning import estado_git
-from mibici.config import INTERIM_DATA_DIR, PROCESSED_DATA_DIR, configurar_mlflow
+from mibici.config import (
+    INTERIM_DATA_DIR,
+    PROCESSED_DATA_DIR,
+    cargar_parametros,
+    configurar_mlflow,
+)
 from mibici.dataset import URL_DATOS_ABIERTOS
+from mibici.modeling.tracking import configurar_mlflow as configurar_mlflow_modelado
 
 app = typer.Typer()
 
@@ -162,6 +168,60 @@ def generar_dataset_estacion_hora(viajes):
     return resultado
 
 
+def generar_dataset_v3(viajes: pd.DataFrame, horizonte_horas: int = 1):
+    """Genera variables para predecir salidas de la siguiente hora."""
+
+    if horizonte_horas != 1:
+        raise ValueError("El dataset v3 utiliza un horizonte de 1 hora.")
+
+    # Reutilizar la agregación y las variables existentes
+    resultado = generar_dataset_estacion_hora(viajes)
+
+    por_estacion = resultado.groupby("estacion_id", sort=False)
+
+    # La fecha_hora representa la hora actual (t)
+    # El objetivo corresponde a las salidas de la siguiente hora (t+1)
+    resultado["fecha_objetivo"] = por_estacion["fecha_hora"].shift(-1)
+    resultado["salidas_siguiente_hora"] = por_estacion["salidas"].shift(-1)
+
+    # Alinear las variables temporales con la hora que se predice
+    columnas_temporales = [
+        "hora",
+        "dia_semana",
+        "mes",
+        "fin_semana",
+        "festivo",
+        "hora_sin",
+        "hora_cos",
+        "dia_semana_sin",
+        "dia_semana_cos",
+        "mes_sin",
+        "mes_cos",
+    ]
+
+    resultado[columnas_temporales] = por_estacion[columnas_temporales].shift(-1)
+
+    # Alinear los rezagos con la hora objetivo
+    # lag_1 representa la demanda de la hora actual
+    columnas_lags = [
+        f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in [1, 24, 168]
+    ]
+
+    resultado[columnas_lags] = por_estacion[columnas_lags].shift(-1)
+
+    # Conservar únicamente los registros con objetivo conocido
+    siguiente_hora = resultado["fecha_hora"] + pd.Timedelta(hours=1)
+
+    resultado = resultado[resultado["fecha_objetivo"] == siguiente_hora].copy()
+
+    resultado["salidas_siguiente_hora"] = resultado["salidas_siguiente_hora"].astype("int32")
+
+    # Los conteos actuales ya están representados por lag_1
+    resultado = resultado.drop(columns=["salidas", "llegadas"])
+
+    return resultado.reset_index(drop=True)
+
+
 def normalizar_variables_historicas(datos: pd.DataFrame):
     """Normaliza los lags utilizando solo los datos de entrenamiento."""
 
@@ -221,7 +281,7 @@ def crear_codificador_estaciones(datos: pd.DataFrame):
     return codificador
 
 
-@app.command()
+@app.command("v2")
 def main(
     input_path: Path = INTERIM_DATA_DIR / "viajes_limpios.parquet",
     output_path: Path = PROCESSED_DATA_DIR / "estacion_hora.parquet",
@@ -369,6 +429,104 @@ def main(
         )
 
     logger.success("Dataset mibici_processed_v2 registrado en MLflow.")
+
+
+@app.command("v3")
+def generar_v3(
+    input_path: Path = INTERIM_DATA_DIR / "viajes_limpios.parquet",
+    output_path: Path = PROCESSED_DATA_DIR / "estacion_hora_v3.parquet",
+):
+    """Genera y registra el dataset v3 para modelado."""
+
+    if not input_path.exists():
+        raise FileNotFoundError(f"No existe el dataset limpio: {input_path}")
+
+    params = cargar_parametros()
+    horizonte = int(params["features"]["horizonte_horas"])
+
+    columnas = [
+        "Origen_Id",
+        "Destino_Id",
+        "Inicio_del_viaje",
+        "Fin_del_viaje",
+    ]
+
+    logger.info("Cargando viajes limpios...")
+    viajes = pd.read_parquet(input_path, columns=columnas)
+
+    logger.info("Generando dataset v3 sin escalar...")
+    procesados = generar_dataset_v3(viajes, horizonte_horas=horizonte)
+
+    # Verificar que el objetivo corresponde a la siguiente hora
+    fecha_esperada = procesados["fecha_hora"] + pd.Timedelta(hours=horizonte)
+
+    if not (procesados["fecha_objetivo"] == fecha_esperada).all():
+        raise ValueError("El objetivo no está alineado con el horizonte.")
+
+    if procesados["salidas_siguiente_hora"].isna().any():
+        raise ValueError("Existen objetivos sin valor conocido.")
+
+    if procesados["fecha_objetivo"].max() > FIN_PERIODO:
+        raise ValueError("Existen objetivos fuera del periodo.")
+
+    # El escalado y la codificación se harán dentro del Pipeline
+    output_path.parent.mkdir(parents=True, exist_ok=True)
+    procesados.to_parquet(output_path, index=False)
+
+    logger.success(f"Dataset v3 generado: {len(procesados):,} registros")
+    logger.info(f"Archivo guardado en: {output_path}")
+
+    # Utilizar el experimento de la Fase 2
+    configurar_mlflow_modelado(params["mlflow"]["experimento"])
+
+    commit, cambios_sin_commit = estado_git()
+
+    if cambios_sin_commit:
+        logger.warning("Existen cambios sin commit en el repositorio.")
+
+    with mlflow.start_run(run_name="preprocesamiento_v3"):
+        mlflow.set_tags(
+            {
+                "git_commit": commit,
+                "git_cambios_sin_commit": str(cambios_sin_commit).lower(),
+                "fuente_datos": URL_DATOS_ABIERTOS,
+            }
+        )
+
+        # Registrar el dataset limpio como entrada
+        viajes_completos = pd.read_parquet(input_path)
+
+        dataset_interim = mlflow.data.from_pandas(
+            viajes_completos,
+            source=str(input_path),
+            name="mibici_interim_v1",
+        )
+
+        mlflow.log_input(dataset_interim, context="interim")
+        del viajes_completos
+
+        # Registrar la nueva versión procesada
+        dataset_v3 = mlflow.data.from_pandas(
+            procesados,
+            source=str(output_path),
+            name="mibici_processed_v3",
+        )
+
+        mlflow.log_input(dataset_v3, context="processed")
+
+        mlflow.log_params(
+            {
+                "filas_procesadas": len(procesados),
+                "estaciones": procesados["estacion_id"].nunique(),
+                "horizonte_horas": horizonte,
+                "rezagos": ",".join(map(str, params["features"]["rezagos"])),
+                "escalado_previo": False,
+            }
+        )
+
+        mlflow.log_artifact(str(output_path), artifact_path="datos")
+
+    logger.success("Dataset mibici_processed_v3 registrado en MLflow.")
 
 
 if __name__ == "__main__":
