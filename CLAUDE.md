@@ -19,12 +19,19 @@ a tiempo y mejorar la disponibilidad del servicio.
 - Git / GitHub
 - Estructura de proyecto **Cookiecutter Data Science**
 
-## Fase 1 — entrega: 25-oct-2026
-1. Limpieza de datos
-2. Análisis exploratorio (EDA)
-3. Preprocesamiento
-4. Versionado de datos con MLflow
-5. Refactor del código a módulos con POO (programación orientada a objetos)
+## Fase 2 — modelado (entrega interna: 6-nov-2026)
+Objetivo: predecir las **salidas de cada estación en la siguiente hora** (horizonte de 1 h)
+para el operador que rebalancea bicicletas.
+1. Configuración en `params.yaml`, leída con `cargar_parametros()` de `mibici/config.py`
+2. Validación walk-forward de ventana creciente (`mibici/modeling/validation.py`),
+   prueba mensual de abril a septiembre de 2026; métricas MAE, RMSE y WAPE
+3. Dataset `mibici_processed_v3` y Pipeline de scikit-learn ajustado dentro de cada ventana
+4. Líneas base, Ridge y HistGradientBoostingRegressor (Poisson) con ajuste de hiperparámetros
+5. MLflow: experimento `mibici-fase2-modelado`, run padre por modelo y runs anidados por
+   ventana (`mibici/modeling/tracking.py`); Model Registry `mibici-demanda-salidas`
+
+## Fase 1 — completada (entregada el 25-oct-2026)
+Limpieza, EDA, preprocesamiento, versionado de datos con MLflow y refactor a módulos con POO.
 
 ## Reglas
 - Código **simple y legible**.
