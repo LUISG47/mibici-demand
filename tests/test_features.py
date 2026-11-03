@@ -5,6 +5,7 @@ import pandas as pd
 from mibici.features import (
     crear_codificador_estaciones,
     generar_dataset_estacion_hora,
+    generar_dataset_v3,
     normalizar_variables_historicas,
 )
 
@@ -127,3 +128,76 @@ def test_cierre_periodo_y_extension_horaria():
     # Las salidas se conservan y la llegada de octubre se excluye
     assert resultado["salidas"].sum() == 3
     assert resultado["llegadas"].sum() == 2
+
+
+def test_dataset_v3_objetivo_siguiente_hora():
+    """Verifica que el objetivo de v3 esté alineado y sin escalado previo."""
+
+    fechas = pd.to_datetime(
+        [
+            "2026-05-10 10:05",
+            "2026-05-10 10:15",
+            "2026-05-10 11:05",
+            "2026-05-10 12:05",
+        ]
+    )
+
+    viajes = pd.DataFrame(
+        {
+            "Origen_Id": [1, 1, 1, 1],
+            "Destino_Id": [1, 1, 1, 1],
+            "Inicio_del_viaje": fechas,
+            "Fin_del_viaje": fechas + pd.Timedelta(minutes=10),
+        }
+    )
+
+    resultado = generar_dataset_v3(viajes)
+
+    # El objetivo debe corresponder exactamente a la siguiente hora
+    assert len(resultado) == 2
+    assert (resultado["fecha_objetivo"] == resultado["fecha_hora"] + pd.Timedelta(hours=1)).all()
+
+    # La hora actual tiene dos salidas y la siguiente tiene una
+    primera = resultado.iloc[0]
+    assert primera["hora"] == 11
+    assert primera["salidas_lag_1"] == 2
+    assert primera["salidas_siguiente_hora"] == 1
+
+    # La última hora no tiene un objetivo conocido
+    assert resultado["fecha_objetivo"].max() == pd.Timestamp("2026-05-10 12:00")
+
+    # V3 conserva los rezagos sin normalizar
+    assert "salidas_lag_1" in resultado.columns
+    assert not any(col.endswith("_norm") for col in resultado.columns)
+
+    # Los conteos actuales no se incluyen como predictores directos
+    assert "salidas" not in resultado.columns
+    assert "llegadas" not in resultado.columns
+
+
+def test_rezagos_configurables_v3():
+    """Comprueba que v3 genera los rezagos solicitados."""
+
+    fechas = pd.date_range(
+        "2026-05-10 10:00",
+        periods=4,
+        freq="h",
+    )
+
+    viajes = pd.DataFrame(
+        {
+            "Origen_Id": [1] * 4,
+            "Destino_Id": [1] * 4,
+            "Inicio_del_viaje": fechas,
+            "Fin_del_viaje": fechas + pd.Timedelta(minutes=10),
+        }
+    )
+
+    resultado = generar_dataset_v3(viajes, rezagos=[1, 2])
+
+    assert "salidas_lag_1" in resultado.columns
+    assert "salidas_lag_2" in resultado.columns
+    assert "llegadas_lag_2" in resultado.columns
+
+    assert "salidas_lag_24" not in resultado.columns
+    assert "llegadas_lag_168" not in resultado.columns
