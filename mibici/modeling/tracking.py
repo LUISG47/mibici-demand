@@ -77,8 +77,15 @@ def registrar_evaluacion(
             ejemplo = X_ejemplo.head(5)
             firma = infer_signature(ejemplo, modelo_final.predict(ejemplo))
 
+            # MLflow 3.17 serializa con skops por defecto y rechaza tipos que no están en
+            # su lista de confianza. El Pipeline incluye TargetEncoder (con su KFold) y
+            # tipos de numpy (numpy.dtype), así que se guarda con cloudpickle.
             mlflow.sklearn.log_model(
-                modelo_final, name="modelo", signature=firma, input_example=ejemplo
+                modelo_final,
+                name="modelo",
+                signature=firma,
+                input_example=ejemplo,
+                serialization_format="cloudpickle",
             )
 
     return padre.info.run_id
