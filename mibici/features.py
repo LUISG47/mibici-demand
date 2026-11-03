@@ -42,9 +42,10 @@ def contar_eventos(estaciones, fechas, nombre):
 
 
 def generar_dataset_estacion_hora(viajes, rezagos=None):
+    """Genera los conteos horarios de salidas y llegadas."""
+
     if rezagos is None:
         rezagos = cargar_parametros()["features"]["rezagos"]
-    """Genera los conteos horarios de salidas y llegadas."""
 
     columnas = [
         "Origen_Id",
@@ -230,9 +231,10 @@ def generar_dataset_v3(
 
 
 def normalizar_variables_historicas(datos: pd.DataFrame, rezagos=None):
+    """Normaliza los lags utilizando solo los datos de entrenamiento."""
+
     if rezagos is None:
         rezagos = cargar_parametros()["features"]["rezagos"]
-    """Normaliza los lags utilizando solo los datos de entrenamiento."""
 
     columnas = [f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in rezagos]
 

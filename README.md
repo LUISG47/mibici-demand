@@ -42,7 +42,6 @@ flowchart LR
 Cada versión del dataset queda registrada en MLflow con su esquema, número de filas, *digest*
 y los tags `git_commit` y `fuente_datos`, que la ligan al código y a la fuente que la generaron.
 
-<CodeBlock language="markdown" editable>
 Para generar los datasets procesados:
 
 ```bash
@@ -51,6 +50,7 @@ python -m mibici.features v2
 
 # Versión 3: variables sin escalar y objetivo de la siguiente hora
 python -m mibici.features v3
+```
 
 ## Avance Fase 1
 
