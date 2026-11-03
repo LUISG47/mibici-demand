@@ -173,3 +173,31 @@ def test_dataset_v3_objetivo_siguiente_hora():
     # Los conteos actuales no se incluyen como predictores directos
     assert "salidas" not in resultado.columns
     assert "llegadas" not in resultado.columns
+
+
+def test_rezagos_configurables_v3():
+    """Comprueba que v3 genera los rezagos solicitados."""
+
+    fechas = pd.date_range(
+        "2026-05-10 10:00",
+        periods=4,
+        freq="h",
+    )
+
+    viajes = pd.DataFrame(
+        {
+            "Origen_Id": [1] * 4,
+            "Destino_Id": [1] * 4,
+            "Inicio_del_viaje": fechas,
+            "Fin_del_viaje": fechas + pd.Timedelta(minutes=10),
+        }
+    )
+
+    resultado = generar_dataset_v3(viajes, rezagos=[1, 2])
+
+    assert "salidas_lag_1" in resultado.columns
+    assert "salidas_lag_2" in resultado.columns
+    assert "llegadas_lag_2" in resultado.columns
+
+    assert "salidas_lag_24" not in resultado.columns
+    assert "llegadas_lag_168" not in resultado.columns

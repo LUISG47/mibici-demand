@@ -41,7 +41,9 @@ def contar_eventos(estaciones, fechas, nombre):
     return eventos.groupby(["estacion_id", "fecha_hora"]).size().rename(nombre)
 
 
-def generar_dataset_estacion_hora(viajes):
+def generar_dataset_estacion_hora(viajes, rezagos=None):
+    if rezagos is None:
+        rezagos = cargar_parametros()["features"]["rezagos"]
     """Genera los conteos horarios de salidas y llegadas."""
 
     columnas = [
@@ -119,8 +121,8 @@ def generar_dataset_estacion_hora(viajes):
     # 0 = lunes, 6 = domingo
     resultado["fin_semana"] = (resultado["dia_semana"] >= 5).astype(int)
 
-    # Variables históricas de demanda por estación
-    for lag in [1, 24, 168]:
+    # Variables históricas según la configuración
+    for lag in rezagos:
         resultado[f"salidas_lag_{lag}"] = resultado.groupby("estacion_id")["salidas"].shift(lag)
 
         resultado[f"llegadas_lag_{lag}"] = resultado.groupby("estacion_id")["llegadas"].shift(lag)
@@ -168,14 +170,21 @@ def generar_dataset_estacion_hora(viajes):
     return resultado
 
 
-def generar_dataset_v3(viajes: pd.DataFrame, horizonte_horas: int = 1):
+def generar_dataset_v3(
+    viajes: pd.DataFrame,
+    horizonte_horas: int = 1,
+    rezagos=None,
+):
     """Genera variables para predecir salidas de la siguiente hora."""
 
     if horizonte_horas != 1:
         raise ValueError("El dataset v3 utiliza un horizonte de 1 hora.")
 
-    # Reutilizar la agregación y las variables existentes
-    resultado = generar_dataset_estacion_hora(viajes)
+    # Utilizar los mismos rezagos del Pipeline
+    if rezagos is None:
+        rezagos = cargar_parametros()["features"]["rezagos"]
+
+    resultado = generar_dataset_estacion_hora(viajes, rezagos=rezagos)
 
     por_estacion = resultado.groupby("estacion_id", sort=False)
 
@@ -203,9 +212,7 @@ def generar_dataset_v3(viajes: pd.DataFrame, horizonte_horas: int = 1):
 
     # Alinear los rezagos con la hora objetivo
     # lag_1 representa la demanda de la hora actual
-    columnas_lags = [
-        f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in [1, 24, 168]
-    ]
+    columnas_lags = [f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in rezagos]
 
     resultado[columnas_lags] = por_estacion[columnas_lags].shift(-1)
 
@@ -222,10 +229,12 @@ def generar_dataset_v3(viajes: pd.DataFrame, horizonte_horas: int = 1):
     return resultado.reset_index(drop=True)
 
 
-def normalizar_variables_historicas(datos: pd.DataFrame):
+def normalizar_variables_historicas(datos: pd.DataFrame, rezagos=None):
+    if rezagos is None:
+        rezagos = cargar_parametros()["features"]["rezagos"]
     """Normaliza los lags utilizando solo los datos de entrenamiento."""
 
-    columnas = [f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in [1, 24, 168]]
+    columnas = [f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in rezagos]
 
     resultado = datos.copy()
 
@@ -304,10 +313,12 @@ def main(
 
     logger.info(f"Viajes cargados: {len(viajes):,}")
 
-    procesados = generar_dataset_estacion_hora(viajes)
+    rezagos = cargar_parametros()["features"]["rezagos"]
+
+    procesados = generar_dataset_estacion_hora(viajes, rezagos=rezagos)
 
     # Normalizar las variables históricas
-    procesados, escalador, medianas = normalizar_variables_historicas(procesados)
+    procesados, escalador, medianas = normalizar_variables_historicas(procesados, rezagos=rezagos)
 
     ruta_escalador = PROCESSED_DATA_DIR / "escalador_lags.pkl"
     ruta_escalador.parent.mkdir(parents=True, exist_ok=True)
@@ -407,7 +418,7 @@ def main(
             {
                 "filas_procesadas": len(procesados),
                 "estaciones_entrenamiento": len(codificador.categories_[0]),
-                "lags": "1,24,168",
+                "lags": ",".join(map(str, rezagos)),
                 "fecha_corte_entrenamiento": str(FECHA_CORTE.date()),
             }
         )
@@ -443,6 +454,7 @@ def generar_v3(
 
     params = cargar_parametros()
     horizonte = int(params["features"]["horizonte_horas"])
+    rezagos = params["features"]["rezagos"]
 
     columnas = [
         "Origen_Id",
@@ -455,7 +467,11 @@ def generar_v3(
     viajes = pd.read_parquet(input_path, columns=columnas)
 
     logger.info("Generando dataset v3 sin escalar...")
-    procesados = generar_dataset_v3(viajes, horizonte_horas=horizonte)
+    procesados = generar_dataset_v3(
+        viajes,
+        horizonte_horas=horizonte,
+        rezagos=rezagos,
+    )
 
     # Verificar que el objetivo corresponde a la siguiente hora
     fecha_esperada = procesados["fecha_hora"] + pd.Timedelta(hours=horizonte)
