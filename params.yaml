@@ -13,12 +13,26 @@ limpieza:
   duracion_atipica_min: 180  # más de 3 h: se marca como atípica
   anio_nacimiento_minimo: 1920
 
+eda:
+  top_estaciones: 10
+  cuantil_duracion_visible: 0.99
+
 features:
   horizonte_horas: 1  # objetivo: salidas de la estación en la siguiente hora
   rezagos: [1, 24, 168]
   # Solo la usa la normalización de mibici_processed_v2 (features.py).
   # Se retirará con la v3: en el walk-forward el escalado se ajusta dentro de cada ventana.
   fecha_corte: "2026-08-01"
+  fin_periodo: "2026-09-30 23:00:00"
+  inicio_extension: "2026-09-29 00:00:00"
+  dias_festivos:
+    - "2025-11-17"
+    - "2025-12-25"
+    - "2026-01-01"
+    - "2026-02-02"
+    - "2026-03-16"
+    - "2026-05-01"
+    - "2026-09-16"
 
 validacion:
   esquema: ventana_creciente

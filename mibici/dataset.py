@@ -10,7 +10,7 @@ import requests
 from tqdm import tqdm
 import typer
 
-from mibici.config import RAW_DATA_DIR
+from mibici.config import RAW_DATA_DIR, cargar_parametros
 
 URL_DATOS_ABIERTOS = "https://mibici.net/en/open-data/"
 
@@ -72,9 +72,20 @@ def descargar_archivo(url: str, destino: Path) -> Path:
     return destino
 
 
-def descargar_meses(inicio: str, fin: str, carpeta: Path = RAW_DATA_DIR) -> list[Path]:
+def descargar_meses(
+    inicio: str | None = None,
+    fin: str | None = None,
+    carpeta: Path = RAW_DATA_DIR,
+) -> list[Path]:
     """Descarga los viajes de los meses entre `inicio` y `fin` (formato AAAA-MM, inclusive)
     y el CSV de nomenclatura de estaciones. Regresa las rutas de los archivos."""
+    if inicio is None or fin is None:
+        params_datos = cargar_parametros().get("datos", {})
+        if inicio is None:
+            inicio = params_datos.get("mes_inicio", "2025-10")
+        if fin is None:
+            fin = params_datos.get("mes_fin", "2026-09")
+
     meses_pedidos = pd.period_range(inicio, fin, freq="M").strftime("%Y-%m")
     enlaces, url_nomenclatura = obtener_enlaces()
 
@@ -102,8 +113,8 @@ def descargar_meses(inicio: str, fin: str, carpeta: Path = RAW_DATA_DIR) -> list
 
 @app.command()
 def main(
-    inicio: str = typer.Option("2025-10", help="Primer mes a descargar (AAAA-MM)"),
-    fin: str = typer.Option("2026-09", help="Último mes a descargar (AAAA-MM)"),
+    inicio: str | None = typer.Option(None, help="Primer mes a descargar (AAAA-MM)"),
+    fin: str | None = typer.Option(None, help="Último mes a descargar (AAAA-MM)"),
 ):
     """Descarga los datos abiertos de MiBici a data/raw/."""
     archivos = descargar_meses(inicio, fin)

@@ -1,5 +1,6 @@
 """Agregación de viajes de MiBici por estación y hora."""
 
+from collections.abc import Sequence
 from math import cos, pi, sin
 from pathlib import Path
 import pickle
@@ -22,11 +23,6 @@ from mibici.modeling.tracking import configurar_mlflow as configurar_mlflow_mode
 
 app = typer.Typer()
 
-# Fechas utilizadas en el preprocesamiento
-FECHA_CORTE = pd.Timestamp("2026-08-01")
-FIN_PERIODO = pd.Timestamp("2026-09-30 23:00:00")
-INICIO_EXTENSION = pd.Timestamp("2026-09-29 00:00:00")
-
 
 def contar_eventos(estaciones, fechas, nombre):
     """Cuenta eventos por estación y hora."""
@@ -41,11 +37,45 @@ def contar_eventos(estaciones, fechas, nombre):
     return eventos.groupby(["estacion_id", "fecha_hora"]).size().rename(nombre)
 
 
-def generar_dataset_estacion_hora(viajes, rezagos=None):
+def generar_dataset_estacion_hora(
+    viajes,
+    rezagos: Sequence[int] | None = None,
+    fin_periodo: str | pd.Timestamp | None = None,
+    inicio_extension: str | pd.Timestamp | None = None,
+    dias_festivos: Sequence[str] | pd.DatetimeIndex | None = None,
+):
     """Genera los conteos horarios de salidas y llegadas."""
+    params_feat = cargar_parametros().get("features", {})
 
     if rezagos is None:
-        rezagos = cargar_parametros()["features"]["rezagos"]
+        rezagos = params_feat.get("rezagos", [1, 24, 168])
+
+    if fin_periodo is None:
+        fin_periodo = pd.Timestamp(params_feat.get("fin_periodo", "2026-09-30 23:00:00"))
+    else:
+        fin_periodo = pd.Timestamp(fin_periodo)
+
+    if inicio_extension is None:
+        inicio_extension = pd.Timestamp(params_feat.get("inicio_extension", "2026-09-29 00:00:00"))
+    else:
+        inicio_extension = pd.Timestamp(inicio_extension)
+
+    if dias_festivos is None:
+        festivos_raw = params_feat.get(
+            "dias_festivos",
+            [
+                "2025-11-17",
+                "2025-12-25",
+                "2026-01-01",
+                "2026-02-02",
+                "2026-03-16",
+                "2026-05-01",
+                "2026-09-16",
+            ],
+        )
+        dias_festivos = pd.to_datetime(festivos_raw)
+    else:
+        dias_festivos = pd.to_datetime(list(dias_festivos))
 
     columnas = [
         "Origen_Id",
@@ -75,7 +105,7 @@ def generar_dataset_estacion_hora(viajes, rezagos=None):
     conteos = pd.concat([salidas, llegadas], axis=1).fillna(0).astype("int32").reset_index()
 
     # Excluir movimientos registrados fuera del periodo
-    conteos = conteos[conteos["fecha_hora"] <= FIN_PERIODO].copy()
+    conteos = conteos[conteos["fecha_hora"] <= fin_periodo].copy()
 
     # Incorporar horas sin viajes para cada estación
     bloques = []
@@ -84,10 +114,10 @@ def generar_dataset_estacion_hora(viajes, rezagos=None):
         primera_actividad = grupo["fecha_hora"].min()
         ultima_actividad = grupo["fecha_hora"].max()
 
-        # Extender las estaciones con actividad desde el 29 de septiembre
+        # Extender las estaciones con actividad desde inicio_extension
         # Las que dejaron de operar antes conservan su último registro
-        if ultima_actividad >= INICIO_EXTENSION:
-            fin_malla = FIN_PERIODO
+        if ultima_actividad >= inicio_extension:
+            fin_malla = fin_periodo
         else:
             fin_malla = ultima_actividad
 
@@ -125,22 +155,7 @@ def generar_dataset_estacion_hora(viajes, rezagos=None):
     # Variables históricas según la configuración
     for lag in rezagos:
         resultado[f"salidas_lag_{lag}"] = resultado.groupby("estacion_id")["salidas"].shift(lag)
-
         resultado[f"llegadas_lag_{lag}"] = resultado.groupby("estacion_id")["llegadas"].shift(lag)
-
-    # Días de descanso obligatorio en México
-    # Dentro del periodo octubre 2025 - septiembre 2026
-    dias_festivos = pd.to_datetime(
-        [
-            "2025-11-17",
-            "2025-12-25",
-            "2026-01-01",
-            "2026-02-02",
-            "2026-03-16",
-            "2026-05-01",
-            "2026-09-16",
-        ]
-    )
 
     # Identificar si la fecha corresponde a un festivo
     resultado["festivo"] = resultado["fecha_hora"].dt.normalize().isin(dias_festivos).astype(int)
@@ -173,19 +188,30 @@ def generar_dataset_estacion_hora(viajes, rezagos=None):
 
 def generar_dataset_v3(
     viajes: pd.DataFrame,
-    horizonte_horas: int = 1,
-    rezagos=None,
+    horizonte_horas: int | None = None,
+    rezagos: Sequence[int] | None = None,
+    fin_periodo: str | pd.Timestamp | None = None,
+    inicio_extension: str | pd.Timestamp | None = None,
+    dias_festivos: Sequence[str] | pd.DatetimeIndex | None = None,
 ):
     """Genera variables para predecir salidas de la siguiente hora."""
+    params_feat = cargar_parametros().get("features", {})
+    if horizonte_horas is None:
+        horizonte_horas = int(params_feat.get("horizonte_horas", 1))
 
     if horizonte_horas != 1:
         raise ValueError("El dataset v3 utiliza un horizonte de 1 hora.")
 
-    # Utilizar los mismos rezagos del Pipeline
     if rezagos is None:
-        rezagos = cargar_parametros()["features"]["rezagos"]
+        rezagos = params_feat.get("rezagos", [1, 24, 168])
 
-    resultado = generar_dataset_estacion_hora(viajes, rezagos=rezagos)
+    resultado = generar_dataset_estacion_hora(
+        viajes,
+        rezagos=rezagos,
+        fin_periodo=fin_periodo,
+        inicio_extension=inicio_extension,
+        dias_festivos=dias_festivos,
+    )
 
     por_estacion = resultado.groupby("estacion_id", sort=False)
 
@@ -212,13 +238,12 @@ def generar_dataset_v3(
     resultado[columnas_temporales] = por_estacion[columnas_temporales].shift(-1)
 
     # Alinear los rezagos con la hora objetivo
-    # lag_1 representa la demanda de la hora actual
     columnas_lags = [f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in rezagos]
 
     resultado[columnas_lags] = por_estacion[columnas_lags].shift(-1)
 
     # Conservar únicamente los registros con objetivo conocido
-    siguiente_hora = resultado["fecha_hora"] + pd.Timedelta(hours=1)
+    siguiente_hora = resultado["fecha_hora"] + pd.DateOffset(hours=horizonte_horas)
 
     resultado = resultado[resultado["fecha_objetivo"] == siguiente_hora].copy()
 
@@ -230,18 +255,27 @@ def generar_dataset_v3(
     return resultado.reset_index(drop=True)
 
 
-def normalizar_variables_historicas(datos: pd.DataFrame, rezagos=None):
+def normalizar_variables_historicas(
+    datos: pd.DataFrame,
+    rezagos: Sequence[int] | None = None,
+    fecha_corte: str | pd.Timestamp | None = None,
+):
     """Normaliza los lags utilizando solo los datos de entrenamiento."""
-
+    params_feat = cargar_parametros().get("features", {})
     if rezagos is None:
-        rezagos = cargar_parametros()["features"]["rezagos"]
+        rezagos = params_feat.get("rezagos", [1, 24, 168])
+
+    if fecha_corte is None:
+        fecha_corte = pd.Timestamp(params_feat.get("fecha_corte", "2026-08-01"))
+    else:
+        fecha_corte = pd.Timestamp(fecha_corte)
 
     columnas = [f"{tipo}_lag_{lag}" for tipo in ["salidas", "llegadas"] for lag in rezagos]
 
     resultado = datos.copy()
 
-    # Entrenamiento: fechas anteriores a agosto de 2026
-    entrenamiento = resultado["fecha_hora"] < FECHA_CORTE
+    # Entrenamiento: fechas anteriores a la fecha de corte
+    entrenamiento = resultado["fecha_hora"] < fecha_corte
 
     if not entrenamiento.any():
         raise ValueError("No hay registros para entrenar el escalador.")
@@ -270,11 +304,20 @@ def normalizar_variables_historicas(datos: pd.DataFrame, rezagos=None):
     return resultado, escalador, medianas.to_dict()
 
 
-def crear_codificador_estaciones(datos: pd.DataFrame):
+def crear_codificador_estaciones(
+    datos: pd.DataFrame,
+    fecha_corte: str | pd.Timestamp | None = None,
+):
     """Prepara la codificación de estaciones con datos de entrenamiento."""
+    if fecha_corte is None:
+        fecha_corte = pd.Timestamp(
+            cargar_parametros().get("features", {}).get("fecha_corte", "2026-08-01")
+        )
+    else:
+        fecha_corte = pd.Timestamp(fecha_corte)
 
     entrenamiento = datos.loc[
-        datos["fecha_hora"] < FECHA_CORTE,
+        datos["fecha_hora"] < fecha_corte,
         ["estacion_id"],
     ]
 
@@ -315,12 +358,17 @@ def main(
 
     logger.info(f"Viajes cargados: {len(viajes):,}")
 
-    rezagos = cargar_parametros()["features"]["rezagos"]
+    params = cargar_parametros()
+    rezagos = params["features"]["rezagos"]
+    fecha_corte = pd.Timestamp(params["features"]["fecha_corte"])
+    fin_periodo = pd.Timestamp(params["features"]["fin_periodo"])
 
     procesados = generar_dataset_estacion_hora(viajes, rezagos=rezagos)
 
     # Normalizar las variables históricas
-    procesados, escalador, medianas = normalizar_variables_historicas(procesados, rezagos=rezagos)
+    procesados, escalador, medianas = normalizar_variables_historicas(
+        procesados, rezagos=rezagos, fecha_corte=fecha_corte
+    )
 
     ruta_escalador = PROCESSED_DATA_DIR / "escalador_lags.pkl"
     ruta_escalador.parent.mkdir(parents=True, exist_ok=True)
@@ -330,7 +378,7 @@ def main(
             {
                 "escalador": escalador,
                 "medianas": medianas,
-                "fecha_corte": str(FECHA_CORTE.date()),
+                "fecha_corte": str(fecha_corte.date()),
             },
             archivo,
         )
@@ -338,7 +386,7 @@ def main(
     logger.info(f"Escalador guardado en: {ruta_escalador}")
 
     # Preparar codificación de estaciones
-    codificador = crear_codificador_estaciones(procesados)
+    codificador = crear_codificador_estaciones(procesados, fecha_corte=fecha_corte)
 
     # Guardar codificador para reutilizarlo en el modelado
     ruta_codificador = PROCESSED_DATA_DIR / "codificador_estaciones.pkl"
@@ -349,14 +397,14 @@ def main(
     logger.info(f"Codificador guardado en: {ruta_codificador}")
 
     # Contabilizar llegadas dentro del periodo
-    llegadas_validas = int((viajes["Fin_del_viaje"].dt.floor("h") <= FIN_PERIODO).sum())
+    llegadas_validas = int((viajes["Fin_del_viaje"].dt.floor("h") <= fin_periodo).sum())
 
     llegadas_fuera_periodo = len(viajes) - llegadas_validas
 
     # Validar resultados antes de guardar el dataset
     assert procesados["salidas"].sum() == len(viajes)
     assert procesados["llegadas"].sum() == llegadas_validas
-    assert procesados["fecha_hora"].max() <= FIN_PERIODO
+    assert procesados["fecha_hora"].max() <= fin_periodo
 
     logger.info(f"Llegadas fuera del periodo: {llegadas_fuera_periodo:,}")
 
@@ -421,7 +469,7 @@ def main(
                 "filas_procesadas": len(procesados),
                 "estaciones_entrenamiento": len(codificador.categories_[0]),
                 "lags": ",".join(map(str, rezagos)),
-                "fecha_corte_entrenamiento": str(FECHA_CORTE.date()),
+                "fecha_corte_entrenamiento": str(fecha_corte.date()),
             }
         )
 
@@ -457,6 +505,7 @@ def generar_v3(
     params = cargar_parametros()
     horizonte = int(params["features"]["horizonte_horas"])
     rezagos = params["features"]["rezagos"]
+    fin_periodo = pd.Timestamp(params["features"]["fin_periodo"])
 
     columnas = [
         "Origen_Id",
@@ -484,7 +533,7 @@ def generar_v3(
     if procesados["salidas_siguiente_hora"].isna().any():
         raise ValueError("Existen objetivos sin valor conocido.")
 
-    if procesados["fecha_objetivo"].max() > FIN_PERIODO:
+    if procesados["fecha_objetivo"].max() > fin_periodo:
         raise ValueError("Existen objetivos fuera del periodo.")
 
     # El escalado y la codificación se harán dentro del Pipeline
@@ -537,7 +586,7 @@ def generar_v3(
                 "filas_procesadas": len(procesados),
                 "estaciones": procesados["estacion_id"].nunique(),
                 "horizonte_horas": horizonte,
-                "rezagos": ",".join(map(str, params["features"]["rezagos"])),
+                "rezagos": ",".join(map(str, rezagos)),
                 "escalado_previo": False,
             }
         )
