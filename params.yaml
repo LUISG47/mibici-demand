@@ -41,6 +41,8 @@ validacion:
 
 modelado:
   semilla: 42
+  # Particiones del KFold interno del TargetEncoder (codificación de estaciones)
+  target_encoder_cv: 5
   # Búsqueda aleatoria para que el ajuste de Gradient Boosting sea viable en una laptop
   busqueda:
     tipo: aleatoria
