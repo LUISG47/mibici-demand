@@ -7,25 +7,30 @@ from typing import Any
 
 import pandas as pd
 
+from mibici.config import cargar_parametros
+
 
 class RawDataDiagnoser:
     """
     Diagnostica la integridad, tipos y calidad de los datos crudos de MiBici.
     """
 
-    DURACION_CORTA_MIN = 1.0
-    DURACION_ATIPICA_MIN = 3 * 60  # > 3 h
-    DURACION_MAXIMA_MIN = 24 * 60  # > 24 h
-    ANIO_NACIMIENTO_MINIMO = 1920
-
     def __init__(
         self,
         viajes: pd.DataFrame,
         nomenclatura: pd.DataFrame | None = None,
+        params: dict | None = None,
     ):
         self.df = viajes
         self.nomenclatura = nomenclatura
         self.resultados: dict[str, Any] = {}
+
+        # Mismos umbrales que DataCleaner, leídos de la sección limpieza de params.yaml
+        cfg = params if params is not None else cargar_parametros()["limpieza"]
+        self.duracion_corta_min = cfg["duracion_minima_misma_estacion_min"]
+        self.duracion_atipica_min = cfg["duracion_atipica_min"]
+        self.duracion_maxima_min = cfg["duracion_maxima_min"]
+        self.anio_nacimiento_minimo = cfg["anio_nacimiento_minimo"]
 
     @staticmethod
     def extraer_mes_de_ruta(ruta: Path) -> str:
@@ -99,7 +104,7 @@ class RawDataDiagnoser:
         conteo_genero = self.df["Genero"].value_counts(dropna=False)
 
         anios = self.df["Año_de_nacimiento"].dropna()
-        invalidos = (anios < self.ANIO_NACIMIENTO_MINIMO).sum()
+        invalidos = (anios < self.anio_nacimiento_minimo).sum()
 
         resumen = {
             "distribucion_genero": conteo_genero,
@@ -125,14 +130,14 @@ class RawDataDiagnoser:
                 "negativa": (duracion < 0).sum(),
                 "cero": (duracion == 0).sum(),
                 "mayor a 0 y menor a 1 min": (
-                    (duracion > 0) & (duracion < self.DURACION_CORTA_MIN)
+                    (duracion > 0) & (duracion < self.duracion_corta_min)
                 ).sum(),
                 "menor a 1 min y misma estación": (
-                    (duracion < self.DURACION_CORTA_MIN) & misma_estacion
+                    (duracion < self.duracion_corta_min) & misma_estacion
                 ).sum(),
                 "mayor a 1 h": (duracion > 60).sum(),
-                "mayor a 3 h": (duracion > self.DURACION_ATIPICA_MIN).sum(),
-                "mayor a 24 h": (duracion > self.DURACION_MAXIMA_MIN).sum(),
+                "mayor a 3 h": (duracion > self.duracion_atipica_min).sum(),
+                "mayor a 24 h": (duracion > self.duracion_maxima_min).sum(),
             },
             name="viajes",
         ).to_frame()

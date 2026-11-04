@@ -38,7 +38,7 @@ class DataCleaner:
         self.ids_estaciones = set(ids_estaciones)
         self.bitacora = []
 
-        cfg = params if params is not None else cargar_parametros().get("limpieza", {})
+        cfg = params if params is not None else cargar_parametros()["limpieza"]
         self.duracion_minima_misma_estacion_min = cfg["duracion_minima_misma_estacion_min"]
         self.duracion_atipica_min = cfg["duracion_atipica_min"]
         self.duracion_maxima_min = cfg["duracion_maxima_min"]
