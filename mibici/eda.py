@@ -7,6 +7,8 @@ from typing import ClassVar
 import numpy as np
 import pandas as pd
 
+from mibici.config import cargar_parametros
+
 
 class ViajesEDA:
     """Calcula agregaciones y patrones temporales y espaciales sobre viajes limpios."""
@@ -79,7 +81,12 @@ class ViajesEDA:
         matriz_promedio.index = list(self.DIAS_SEMANA)
         return matriz_promedio
 
-    def obtener_top_estaciones(self, top_n: int = 10) -> tuple[pd.DataFrame, pd.DataFrame]:
+    def obtener_top_estaciones(
+        self, top_n: int | None = None
+    ) -> tuple[pd.DataFrame, pd.DataFrame]:
+        if top_n is None:
+            top_n = cargar_parametros()["eda"]["top_estaciones"]
+
         salidas = (
             self.viajes["Origen_Id"]
             .value_counts()
@@ -132,8 +139,13 @@ class ViajesEDA:
         )
         return True
 
-    def obtener_duraciones_visibles(self, quantil: float = 0.99) -> tuple[pd.Series, float, int]:
+    def obtener_duraciones_visibles(
+        self, quantil: float | None = None
+    ) -> tuple[pd.Series, float, int]:
         """Filtra duraciones hasta el cuantil especificado para descartar outliers visuales."""
+        if quantil is None:
+            quantil = cargar_parametros()["eda"]["cuantil_duracion_visible"]
+
         limite = self.viajes["duracion_min"].quantile(quantil)
         visibles = self.viajes.loc[self.viajes["duracion_min"] <= limite, "duracion_min"]
         fuera_rango = len(self.viajes) - len(visibles)

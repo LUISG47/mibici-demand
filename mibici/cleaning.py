@@ -12,7 +12,13 @@ import mlflow
 import pandas as pd
 import typer
 
-from mibici.config import INTERIM_DATA_DIR, PROJ_ROOT, RAW_DATA_DIR, configurar_mlflow
+from mibici.config import (
+    INTERIM_DATA_DIR,
+    PROJ_ROOT,
+    RAW_DATA_DIR,
+    cargar_parametros,
+    configurar_mlflow,
+)
 from mibici.dataset import URL_DATOS_ABIERTOS
 
 app = typer.Typer()
@@ -25,16 +31,18 @@ class DataCleaner:
     `run()` las aplica en orden y deja el resultado de cada una en `self.bitacora`.
     """
 
-    # Umbrales (decididos a partir de reports/diagnostico_raw.md)
-    DURACION_ATIPICA_MIN = 3 * 60  # más de 3 h: se marca como atípica
-    DURACION_MAXIMA_MIN = 24 * 60  # más de 24 h: se elimina
-    ANIO_NACIMIENTO_MINIMO = 1920
     FORMATO_FECHA = "%Y-%m-%d %H:%M:%S"
 
-    def __init__(self, viajes: pd.DataFrame, ids_estaciones):
+    def __init__(self, viajes: pd.DataFrame, ids_estaciones, params: dict | None = None):
         self.df = viajes.copy()
         self.ids_estaciones = set(ids_estaciones)
         self.bitacora = []
+
+        cfg = params if params is not None else cargar_parametros().get("limpieza", {})
+        self.duracion_minima_misma_estacion_min = cfg["duracion_minima_misma_estacion_min"]
+        self.duracion_atipica_min = cfg["duracion_atipica_min"]
+        self.duracion_maxima_min = cfg["duracion_maxima_min"]
+        self.anio_nacimiento_minimo = cfg["anio_nacimiento_minimo"]
 
     # ---------- Lectura ----------
 
@@ -73,22 +81,24 @@ class DataCleaner:
         return self._eliminar(self.df["duracion_min"] == 0)
 
     def eliminar_cortos_misma_estacion(self) -> int:
-        """Menos de 1 minuto y regreso a la misma estación: la bici se sacó y se devolvió."""
+        """Menos del umbral mínimo y regreso a la misma estación: se sacó y devolvió."""
         misma_estacion = self.df["Origen_Id"] == self.df["Destino_Id"]
-        return self._eliminar((self.df["duracion_min"] < 1) & misma_estacion)
+        return self._eliminar(
+            (self.df["duracion_min"] < self.duracion_minima_misma_estacion_min) & misma_estacion
+        )
 
     def eliminar_mas_de_24h(self) -> int:
-        """Viajes de más de 24 h: bicicletas no devueltas o errores de registro."""
-        return self._eliminar(self.df["duracion_min"] > self.DURACION_MAXIMA_MIN)
+        """Viajes de más del umbral máximo: bicicletas no devueltas o errores de registro."""
+        return self._eliminar(self.df["duracion_min"] > self.duracion_maxima_min)
 
     def marcar_duracion_atipica(self) -> int:
-        """duracion_atipica = True para viajes de 3 a 24 h. Se conservan."""
-        self.df["duracion_atipica"] = self.df["duracion_min"] > self.DURACION_ATIPICA_MIN
+        """duracion_atipica = True para viajes por encima del umbral atípico. Se conservan."""
+        self.df["duracion_atipica"] = self.df["duracion_min"] > self.duracion_atipica_min
         return int(self.df["duracion_atipica"].sum())
 
     def anio_nacimiento_invalido_a_nulo(self) -> int:
         """Años imposibles (199, 1420) pasan a nulo; el viaje sí ocurrió, no se elimina."""
-        invalido = self.df["Año_de_nacimiento"] < self.ANIO_NACIMIENTO_MINIMO
+        invalido = self.df["Año_de_nacimiento"] < self.anio_nacimiento_minimo
         self.df.loc[invalido, "Año_de_nacimiento"] = None
         return int(invalido.sum())
 
