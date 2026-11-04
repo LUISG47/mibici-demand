@@ -17,6 +17,7 @@ def crear_pipeline(estimador, params=None):
 
     rezagos = params["features"]["rezagos"]
     semilla = params["modelado"]["semilla"]
+    particiones_cv = params["modelado"]["target_encoder_cv"]
 
     # Variables históricas sin normalizar del dataset v3
     columnas_historicas = [
@@ -56,7 +57,7 @@ def crear_pipeline(estimador, params=None):
                 TargetEncoder(
                     target_type="continuous",
                     cv=KFold(
-                        n_splits=5,
+                        n_splits=particiones_cv,
                         shuffle=True,
                         random_state=semilla,
                     ),
