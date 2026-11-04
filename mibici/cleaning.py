@@ -31,11 +31,6 @@ class DataCleaner:
     `run()` las aplica en orden y deja el resultado de cada una en `self.bitacora`.
     """
 
-    # Umbrales (decididos a partir de reports/diagnostico_raw.md)
-    DURACION_MINIMA_MISMA_ESTACION_MIN = 1
-    DURACION_ATIPICA_MIN = 3 * 60  # más de 3 h: se marca como atípica
-    DURACION_MAXIMA_MIN = 24 * 60  # más de 24 h: se elimina
-    ANIO_NACIMIENTO_MINIMO = 1920
     FORMATO_FECHA = "%Y-%m-%d %H:%M:%S"
 
     def __init__(self, viajes: pd.DataFrame, ids_estaciones, params: dict | None = None):
@@ -44,14 +39,10 @@ class DataCleaner:
         self.bitacora = []
 
         cfg = params if params is not None else cargar_parametros().get("limpieza", {})
-        self.duracion_minima_misma_estacion_min = cfg.get(
-            "duracion_minima_misma_estacion_min", self.DURACION_MINIMA_MISMA_ESTACION_MIN
-        )
-        self.duracion_atipica_min = cfg.get("duracion_atipica_min", self.DURACION_ATIPICA_MIN)
-        self.duracion_maxima_min = cfg.get("duracion_maxima_min", self.DURACION_MAXIMA_MIN)
-        self.anio_nacimiento_minimo = cfg.get(
-            "anio_nacimiento_minimo", self.ANIO_NACIMIENTO_MINIMO
-        )
+        self.duracion_minima_misma_estacion_min = cfg["duracion_minima_misma_estacion_min"]
+        self.duracion_atipica_min = cfg["duracion_atipica_min"]
+        self.duracion_maxima_min = cfg["duracion_maxima_min"]
+        self.anio_nacimiento_minimo = cfg["anio_nacimiento_minimo"]
 
     # ---------- Lectura ----------
 

@@ -85,7 +85,7 @@ class ViajesEDA:
         self, top_n: int | None = None
     ) -> tuple[pd.DataFrame, pd.DataFrame]:
         if top_n is None:
-            top_n = cargar_parametros().get("eda", {}).get("top_estaciones", 10)
+            top_n = cargar_parametros()["eda"]["top_estaciones"]
 
         salidas = (
             self.viajes["Origen_Id"]
@@ -144,7 +144,7 @@ class ViajesEDA:
     ) -> tuple[pd.Series, float, int]:
         """Filtra duraciones hasta el cuantil especificado para descartar outliers visuales."""
         if quantil is None:
-            quantil = cargar_parametros().get("eda", {}).get("cuantil_duracion_visible", 0.99)
+            quantil = cargar_parametros()["eda"]["cuantil_duracion_visible"]
 
         limite = self.viajes["duracion_min"].quantile(quantil)
         visibles = self.viajes.loc[self.viajes["duracion_min"] <= limite, "duracion_min"]

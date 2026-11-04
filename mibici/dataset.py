@@ -80,11 +80,11 @@ def descargar_meses(
     """Descarga los viajes de los meses entre `inicio` y `fin` (formato AAAA-MM, inclusive)
     y el CSV de nomenclatura de estaciones. Regresa las rutas de los archivos."""
     if inicio is None or fin is None:
-        params_datos = cargar_parametros().get("datos", {})
+        params_datos = cargar_parametros()["datos"]
         if inicio is None:
-            inicio = params_datos.get("mes_inicio", "2025-10")
+            inicio = params_datos["mes_inicio"]
         if fin is None:
-            fin = params_datos.get("mes_fin", "2026-09")
+            fin = params_datos["mes_fin"]
 
     meses_pedidos = pd.period_range(inicio, fin, freq="M").strftime("%Y-%m")
     enlaces, url_nomenclatura = obtener_enlaces()

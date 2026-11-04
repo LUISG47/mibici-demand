@@ -45,37 +45,20 @@ def generar_dataset_estacion_hora(
     dias_festivos: Sequence[str] | pd.DatetimeIndex | None = None,
 ):
     """Genera los conteos horarios de salidas y llegadas."""
-    params_feat = cargar_parametros().get("features", {})
+    if any(arg is None for arg in (rezagos, fin_periodo, inicio_extension, dias_festivos)):
+        params_feat = cargar_parametros()["features"]
+        if rezagos is None:
+            rezagos = params_feat["rezagos"]
+        if fin_periodo is None:
+            fin_periodo = pd.Timestamp(params_feat["fin_periodo"])
+        if inicio_extension is None:
+            inicio_extension = pd.Timestamp(params_feat["inicio_extension"])
+        if dias_festivos is None:
+            dias_festivos = pd.to_datetime(params_feat["dias_festivos"])
 
-    if rezagos is None:
-        rezagos = params_feat.get("rezagos", [1, 24, 168])
-
-    if fin_periodo is None:
-        fin_periodo = pd.Timestamp(params_feat.get("fin_periodo", "2026-09-30 23:00:00"))
-    else:
-        fin_periodo = pd.Timestamp(fin_periodo)
-
-    if inicio_extension is None:
-        inicio_extension = pd.Timestamp(params_feat.get("inicio_extension", "2026-09-29 00:00:00"))
-    else:
-        inicio_extension = pd.Timestamp(inicio_extension)
-
-    if dias_festivos is None:
-        festivos_raw = params_feat.get(
-            "dias_festivos",
-            [
-                "2025-11-17",
-                "2025-12-25",
-                "2026-01-01",
-                "2026-02-02",
-                "2026-03-16",
-                "2026-05-01",
-                "2026-09-16",
-            ],
-        )
-        dias_festivos = pd.to_datetime(festivos_raw)
-    else:
-        dias_festivos = pd.to_datetime(list(dias_festivos))
+    fin_periodo = pd.Timestamp(fin_periodo)
+    inicio_extension = pd.Timestamp(inicio_extension)
+    dias_festivos = pd.to_datetime(list(dias_festivos))
 
     columnas = [
         "Origen_Id",
@@ -195,15 +178,14 @@ def generar_dataset_v3(
     dias_festivos: Sequence[str] | pd.DatetimeIndex | None = None,
 ):
     """Genera variables para predecir salidas de la siguiente hora."""
-    params_feat = cargar_parametros().get("features", {})
     if horizonte_horas is None:
-        horizonte_horas = int(params_feat.get("horizonte_horas", 1))
+        horizonte_horas = int(cargar_parametros()["features"]["horizonte_horas"])
 
     if horizonte_horas != 1:
         raise ValueError("El dataset v3 utiliza un horizonte de 1 hora.")
 
     if rezagos is None:
-        rezagos = params_feat.get("rezagos", [1, 24, 168])
+        rezagos = cargar_parametros()["features"]["rezagos"]
 
     resultado = generar_dataset_estacion_hora(
         viajes,
@@ -261,12 +243,12 @@ def normalizar_variables_historicas(
     fecha_corte: str | pd.Timestamp | None = None,
 ):
     """Normaliza los lags utilizando solo los datos de entrenamiento."""
-    params_feat = cargar_parametros().get("features", {})
+    params_feat = cargar_parametros()["features"]
     if rezagos is None:
-        rezagos = params_feat.get("rezagos", [1, 24, 168])
+        rezagos = params_feat["rezagos"]
 
     if fecha_corte is None:
-        fecha_corte = pd.Timestamp(params_feat.get("fecha_corte", "2026-08-01"))
+        fecha_corte = pd.Timestamp(params_feat["fecha_corte"])
     else:
         fecha_corte = pd.Timestamp(fecha_corte)
 
@@ -310,9 +292,7 @@ def crear_codificador_estaciones(
 ):
     """Prepara la codificación de estaciones con datos de entrenamiento."""
     if fecha_corte is None:
-        fecha_corte = pd.Timestamp(
-            cargar_parametros().get("features", {}).get("fecha_corte", "2026-08-01")
-        )
+        fecha_corte = pd.Timestamp(cargar_parametros()["features"]["fecha_corte"])
     else:
         fecha_corte = pd.Timestamp(fecha_corte)
 
