@@ -94,6 +94,45 @@ En MLflow cada modelo tiene un run padre con las métricas promedio y un run ani
 ventana. `registrar_modelo(run_id, ..., alias="champion")` lo registra como
 `mibici-demanda-salidas` y se carga con `models:/mibici-demanda-salidas@champion`.
 
+## Fase 2: modelado de principio a fin
+
+Objetivo: predecir las salidas de cada estación en la siguiente hora. Con el `.venv`
+activado y los viajes limpios en `data/interim/` (ver
+[Limpieza y versionado](#limpieza-y-versionado-de-datos-con-mlflow)):
+
+```bash
+# 1. Dataset v3: variables sin escalar y objetivo de la siguiente hora
+#    (data/processed/estacion_hora_v3.parquet, registrado como mibici_processed_v3)
+python -m mibici.features v3
+
+# 2. Comparar modelos y registrar el champion
+python -m mibici.modeling.compare_models
+
+# 3. Predecir con el champion (data/processed/predicciones.parquet)
+python -m mibici.modeling.predict
+
+# 4. Revisar runs, métricas y Model Registry (http://127.0.0.1:5000)
+mlflow ui --backend-store-uri sqlite:///$PWD/mlflow.db
+```
+
+- **`compare_models`** evalúa con walk-forward (abril a septiembre de 2026) las dos líneas
+  base (misma hora de la semana anterior y media por estación × día × hora), Ridge y
+  HistGradientBoosting con pérdida Poisson. Ridge y HGB se ajustan dentro de cada ventana
+  con el espacio de `params.yaml`. Cada modelo queda en el experimento
+  `mibici-fase2-modelado` con un run padre (métricas promedio e hiperparámetros más
+  elegidos) y un run anidado por ventana. El de menor MAE promedio se entrena con todo el
+  periodo y se registra como `mibici-demanda-salidas@champion`.
+- La corrida completa tarda unos 20 minutos y usa hasta ~9 GB de RAM. El avance del HGB se
+  guarda en `data/processed/checkpoints_hgb/`; si se interrumpe, se puede volver a correr y
+  continúa donde se quedó.
+- **`predict`** carga `models:/<modelo_registrado>@champion` (nombre de `params.yaml`) y
+  guarda `estacion_id`, `fecha_hora`, `fecha_objetivo`, las salidas reales (si vienen en
+  los datos) y las predichas, recortadas en 0. Acepta `--datos-path`, `--salida-path`
+  (`.parquet` o `.csv`), `--alias` y `--modelo-nombre`.
+- El notebook [`notebooks/2.0-aaf-modelado.ipynb`](notebooks/2.0-aaf-modelado.ipynb)
+  muestra la comparación registrada en MLflow y predice con el champion; se ejecuta
+  después del paso 2.
+
 ## Instalación
 
 ```bash
