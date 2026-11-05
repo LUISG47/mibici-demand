@@ -8,8 +8,7 @@ import numpy as np
 import pandas as pd
 import typer
 
-from mibici.config import PROCESSED_DATA_DIR, cargar_parametros
-from mibici.modeling.tracking import configurar_mlflow
+from mibici.config import MLFLOW_TRACKING_URI, PROCESSED_DATA_DIR, cargar_parametros
 
 app = typer.Typer()
 
@@ -17,14 +16,12 @@ app = typer.Typer()
 def cargar_modelo(
     nombre: str | None = None,
     alias: str = "champion",
-    experimento: str | None = None,
 ):
     """Carga un modelo registrado desde el MLflow Model Registry utilizando su alias."""
-    params = cargar_parametros()
-    experimento = experimento or params["mlflow"]["experimento"]
-    configurar_mlflow(experimento)
+    # Solo se apunta al registro del proyecto: cargar no debe crear experimentos
+    mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
 
-    nombre = nombre or params["mlflow"]["modelo_registrado"]
+    nombre = nombre or cargar_parametros()["mlflow"]["modelo_registrado"]
     uri = f"models:/{nombre}@{alias}"
 
     logger.info(f"Cargando modelo desde MLflow Model Registry: {uri}")
@@ -42,7 +39,9 @@ def predecir(
         modelo = cargar_modelo(nombre=nombre, alias=alias)
 
     X = datos.drop(columns=["salidas_siguiente_hora"], errors="ignore")
-    return modelo.predict(X)
+
+    # La demanda no puede ser negativa (Ridge puede predecir valores menores que 0)
+    return np.clip(modelo.predict(X), 0, None)
 
 
 @app.command()

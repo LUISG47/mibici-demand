@@ -1,6 +1,7 @@
 """Pruebas para el módulo de inferencia y predicción."""
 
 import mlflow
+from mlflow.exceptions import MlflowException
 import numpy as np
 import pandas as pd
 import pytest
@@ -18,6 +19,7 @@ def mlflow_predict_temporal(tmp_path, monkeypatch):
     uri = f"sqlite:///{tmp_path / 'mlflow.db'}"
 
     monkeypatch.setattr(tracking, "MLFLOW_TRACKING_URI", uri)
+    monkeypatch.setattr(predict, "MLFLOW_TRACKING_URI", uri)
     monkeypatch.setattr(tracking, "MLFLOW_ARTIFACTS_DIR", tmp_path / "mlruns")
 
     yield uri
@@ -93,7 +95,7 @@ def test_cargar_modelo_y_predecir(mlflow_predict_temporal):
 
     assert len(predicciones) == len(X)
     assert np.isfinite(predicciones).all()
-    np.testing.assert_allclose(predicciones, modelo_original.predict(X))
+    np.testing.assert_allclose(predicciones, np.clip(modelo_original.predict(X), 0, None))
 
 
 def test_predecir_carga_modelo_automaticamente(mlflow_predict_temporal):
@@ -116,7 +118,7 @@ def test_predecir_descarta_columna_objetivo(mlflow_predict_temporal):
 def test_error_cuando_modelo_no_existe(mlflow_predict_temporal):
     """Verifica que se lance una excepción clara si el alias o modelo no existen."""
     tracking.configurar_mlflow("prueba-predict")
-    with pytest.raises(Exception):
+    with pytest.raises(MlflowException):
         predict.cargar_modelo(nombre="modelo-inexistente", alias="champion")
 
 
@@ -151,3 +153,69 @@ def test_cli_predict(mlflow_predict_temporal, tmp_path):
     assert "salidas_predichas" in df_resultado.columns
     assert "salidas_reales" in df_resultado.columns
     assert len(df_resultado) == len(datos)
+
+
+def test_cargar_modelo_no_crea_experimentos(mlflow_predict_temporal):
+    """Cargar el champion solo apunta al registro: no crea el experimento del proyecto."""
+    registrar_modelo_champion_dummy()
+    experimento = predict.cargar_parametros()["mlflow"]["experimento"]
+
+    predict.cargar_modelo(nombre="mibici-demanda-salidas", alias="champion")
+
+    assert mlflow.get_tracking_uri() == mlflow_predict_temporal
+    assert mlflow.get_experiment_by_name(experimento) is None
+
+
+def test_predecir_recorta_negativos_en_cero():
+    """La demanda no puede ser negativa: las predicciones se recortan en 0."""
+
+    class ModeloNegativo:
+        def predict(self, X):
+            return np.array([-2.0, 0.0, 1.5])
+
+    datos = pd.DataFrame({"estacion_id": [1, 2, 3], "salidas_siguiente_hora": [0, 0, 2]})
+
+    predicciones = predict.predecir(datos, modelo=ModeloNegativo())
+
+    np.testing.assert_array_equal(predicciones, [0.0, 0.0, 1.5])
+
+
+def test_cli_predict_salida_csv_conserva_identificadores(mlflow_predict_temporal, tmp_path):
+    """El CLI con salida CSV conserva las columnas de identificación de cada fila."""
+    registrar_modelo_champion_dummy()
+    datos = generar_datos_prueba()
+
+    entrada_path = tmp_path / "datos_entrada.parquet"
+    salida_path = tmp_path / "predicciones.csv"
+    datos.to_parquet(entrada_path, index=False)
+
+    resultado = CliRunner().invoke(
+        predict.app,
+        [
+            "--datos-path",
+            str(entrada_path),
+            "--salida-path",
+            str(salida_path),
+            "--modelo-nombre",
+            "mibici-demanda-salidas",
+        ],
+    )
+
+    assert resultado.exit_code == 0, resultado.output
+
+    salida = pd.read_csv(salida_path, parse_dates=["fecha_hora", "fecha_objetivo"])
+
+    assert list(salida.columns) == [
+        "estacion_id",
+        "fecha_hora",
+        "fecha_objetivo",
+        "salidas_reales",
+        "salidas_predichas",
+    ]
+    pd.testing.assert_frame_equal(
+        salida[["estacion_id", "fecha_hora", "fecha_objetivo"]],
+        datos[["estacion_id", "fecha_hora", "fecha_objetivo"]],
+        check_dtype=False,
+    )
+    np.testing.assert_array_equal(salida["salidas_reales"], datos["salidas_siguiente_hora"])
+    assert (salida["salidas_predichas"] >= 0).all()
