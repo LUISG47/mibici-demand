@@ -14,6 +14,7 @@ def diagnostico_prueba():
     """Crea predicciones de ejemplo para distintas estaciones y horas."""
     return pd.DataFrame(
         {
+            "fecha_hora": pd.to_datetime(["2026-06-01 00:00"] * 4 + ["2026-06-01 17:00"] * 2),
             "estacion_id": [3, 71, 158, 266, 3, 71],
             "hora": [1, 1, 1, 1, 18, 18],
             "valor_real": [0, 0, 1, 0, 3, 2],

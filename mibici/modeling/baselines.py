@@ -1,4 +1,3 @@
-
 """Modelos de referencia para la predicción de demanda de MiBici."""
 
 import numpy as np
@@ -26,11 +25,7 @@ class WeeklyLagBaseline(RegressorMixin, BaseEstimator):
 
         self.media_global_ = float(datos["objetivo"].mean())
 
-        self.medias_estacion_ = (
-            datos.groupby("estacion_id")["objetivo"]
-            .mean()
-            .to_dict()
-        )
+        self.medias_estacion_ = datos.groupby("estacion_id")["objetivo"].mean().to_dict()
 
         return self
 
@@ -54,7 +49,7 @@ class WeeklyLagBaseline(RegressorMixin, BaseEstimator):
 
         return predicciones.to_numpy(dtype=float)
 
-    
+
 class HistoricalMeanBaseline(RegressorMixin, BaseEstimator):
     """Predice la media histórica por estación, día de semana y hora."""
 
@@ -71,13 +66,9 @@ class HistoricalMeanBaseline(RegressorMixin, BaseEstimator):
 
         self.media_global_ = float(datos["objetivo"].mean())
 
-        self.medias_estacion_ = (
-            datos.groupby("estacion_id")["objetivo"].mean().to_dict()
-        )
+        self.medias_estacion_ = datos.groupby("estacion_id")["objetivo"].mean().to_dict()
 
-        self.medias_historicas_ = (
-            datos.groupby(columnas)["objetivo"].mean().to_dict()
-        )
+        self.medias_historicas_ = datos.groupby(columnas)["objetivo"].mean().to_dict()
 
         return self
 
@@ -104,4 +95,3 @@ class HistoricalMeanBaseline(RegressorMixin, BaseEstimator):
         respaldo = respaldo.fillna(self.media_global_)
 
         return predicciones.fillna(respaldo).to_numpy(dtype=float)
-

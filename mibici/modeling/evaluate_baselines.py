@@ -1,4 +1,3 @@
-
 """Evaluación walk-forward de las líneas base de MiBici."""
 
 from pathlib import Path
@@ -38,9 +37,7 @@ def evaluar_baselines(datos: pd.DataFrame, params=None):
     faltantes = set(columnas) - set(datos.columns)
 
     if faltantes:
-        raise ValueError(
-            f"Faltan columnas requeridas: {sorted(faltantes)}"
-        )
+        raise ValueError(f"Faltan columnas requeridas: {sorted(faltantes)}")
 
     X = datos.drop(columns=["salidas_siguiente_hora"])
     y = datos["salidas_siguiente_hora"].to_numpy()
@@ -83,9 +80,7 @@ def main(
     """Ejecuta ambas líneas base utilizando el dataset v3."""
 
     if not datos_path.exists():
-        raise FileNotFoundError(
-            f"No existe el dataset: {datos_path}"
-        )
+        raise FileNotFoundError(f"No existe el dataset: {datos_path}")
 
     logger.info(f"Cargando dataset: {datos_path}")
 
@@ -104,9 +99,7 @@ def main(
     )
 
     logger.success("Evaluación de líneas base completada.")
-    logger.info(
-        f"\n{comparacion.to_string(index=False)}"
-    )
+    logger.info(f"\n{comparacion.to_string(index=False)}")
 
 
 if __name__ == "__main__":

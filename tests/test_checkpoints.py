@@ -77,7 +77,7 @@ def test_whenCheckpointContainsInvalidStructure_thenRaisesValueError(
     ruta = tmp_path / "checkpoint.json"
     ruta.write_text(json.dumps([1, 2, 3]), encoding="utf-8")
 
-    with pytest.raises(ValueError, match="objeto JSON"):
+    with pytest.raises(TypeError, match="objeto JSON"):
         cargar_checkpoint(ruta)
 
 
