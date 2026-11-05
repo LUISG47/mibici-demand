@@ -1,13 +1,12 @@
-
 """Persistencia atómica de checkpoints para entrenamientos de MiBici."""
 
 import hashlib
-
-import pandas as pd
 import json
 import os
 from pathlib import Path
 import tempfile
+
+import pandas as pd
 
 
 def guardar_checkpoint(ruta: Path, contenido: dict) -> None:
@@ -49,9 +48,7 @@ def cargar_checkpoint(ruta: Path) -> dict | None:
         contenido = json.load(archivo)
 
     if not isinstance(contenido, dict):
-        raise ValueError(
-            f"El checkpoint debe contener un objeto JSON: {ruta}"
-        )
+        raise TypeError(f"El checkpoint debe contener un objeto JSON: {ruta}")
 
     return contenido
 
@@ -75,12 +72,7 @@ def identificar_ejecucion(
     )
 
     digest.update(
-        repr(
-            [
-                (columna, str(tipo))
-                for columna, tipo in datos.dtypes.items()
-            ]
-        ).encode("utf-8")
+        repr([(columna, str(tipo)) for columna, tipo in datos.dtypes.items()]).encode("utf-8")
     )
 
     digest.update(str(datos.shape).encode("utf-8"))
@@ -111,4 +103,3 @@ def identificar_ejecucion(
         digest.update(hashes.tobytes())
 
     return digest.hexdigest()
-

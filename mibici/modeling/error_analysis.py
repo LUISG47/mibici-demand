@@ -1,4 +1,3 @@
-
 """Diagnóstico de errores de predicción de HGB Poisson."""
 
 from pathlib import Path
@@ -11,15 +10,6 @@ from mibici.config import cargar_parametros
 from mibici.modeling.checkpoints import cargar_checkpoint
 from mibici.modeling.pipeline import crear_pipeline
 from mibici.modeling.validation import METRICAS, WalkForwardSplitter
-
-
-HIPERPARAMETROS_HGB = (
-    "loss",
-    "learning_rate",
-    "max_iter",
-    "max_leaf_nodes",
-    "min_samples_leaf",
-)
 
 
 def obtener_predicciones_hgb(
@@ -35,14 +25,12 @@ def obtener_predicciones_hgb(
     checkpoint = cargar_checkpoint(ruta_checkpoint)
 
     if checkpoint is None:
-        raise FileNotFoundError(
-            f"No existe el checkpoint: {ruta_checkpoint}"
-        )
+        raise FileNotFoundError(f"No existe el checkpoint: {ruta_checkpoint}")
 
     resultado = checkpoint.get("resultado")
 
     if not isinstance(resultado, dict):
-        raise ValueError("El checkpoint no contiene un resultado válido.")
+        raise TypeError("El checkpoint no contiene un resultado válido.")
 
     requeridas = {
         "fecha_hora",
@@ -54,14 +42,11 @@ def obtener_predicciones_hgb(
     faltantes = requeridas - set(datos.columns)
 
     if faltantes:
-        raise ValueError(
-            f"Faltan columnas requeridas: {sorted(faltantes)}"
-        )
+        raise ValueError(f"Faltan columnas requeridas: {sorted(faltantes)}")
 
-    hiperparametros = {
-        nombre: resultado[nombre]
-        for nombre in HIPERPARAMETROS_HGB
-    }
+    # Los hiperparámetros a reconstruir son los del espacio de búsqueda de params.yaml
+    espacio = params["modelado"]["hiperparametros"]["hist_gradient_boosting"]
+    hiperparametros = {nombre: resultado[nombre] for nombre in espacio}
 
     X = datos.drop(columns=["salidas_siguiente_hora"])
     y = datos["salidas_siguiente_hora"].to_numpy()
@@ -71,26 +56,17 @@ def obtener_predicciones_hgb(
 
     ventanas = [
         (entrenamiento, prueba)
-        for indice, (entrenamiento, prueba) in enumerate(
-            splitter.split(X, y)
-        )
+        for indice, (entrenamiento, prueba) in enumerate(splitter.split(X, y))
         if str(splitter.meses_prueba[indice]) == mes_checkpoint
     ]
 
     if len(ventanas) != 1:
-        raise ValueError(
-            f"No se encontró una ventana única para {mes_checkpoint}."
-        )
+        raise ValueError(f"No se encontró una ventana única para {mes_checkpoint}.")
 
     entrenamiento, prueba = ventanas[0]
 
-    if (
-        len(entrenamiento) != resultado["n_entrenamiento"]
-        or len(prueba) != resultado["n_prueba"]
-    ):
-        raise ValueError(
-            "Los tamaños de la ventana no coinciden con el checkpoint."
-        )
+    if len(entrenamiento) != resultado["n_entrenamiento"] or len(prueba) != resultado["n_prueba"]:
+        raise ValueError("Los tamaños de la ventana no coinciden con el checkpoint.")
 
     estimador = HistGradientBoostingRegressor(
         **hiperparametros,
@@ -108,13 +84,10 @@ def obtener_predicciones_hgb(
     valores_reales = y[prueba]
 
     if not np.isfinite(predicciones).all():
-        raise ValueError(
-            "El modelo generó predicciones no finitas."
-        )
+        raise ValueError("El modelo generó predicciones no finitas.")
 
     metricas = {
-        nombre: metrica(valores_reales, predicciones)
-        for nombre, metrica in METRICAS.items()
+        nombre: metrica(valores_reales, predicciones) for nombre, metrica in METRICAS.items()
     }
 
     for nombre, valor in metricas.items():
@@ -130,23 +103,15 @@ def obtener_predicciones_hgb(
                 f"checkpoint={resultado[nombre]}"
             )
 
-    diagnostico = X.iloc[prueba][
-        ["fecha_hora", "estacion_id", "hora"]
-    ].copy()
+    diagnostico = X.iloc[prueba][["fecha_hora", "estacion_id", "hora"]].copy()
 
     diagnostico["valor_real"] = valores_reales
     diagnostico["prediccion"] = predicciones
 
-    diagnostico["error"] = (
-        diagnostico["valor_real"] - diagnostico["prediccion"]
-    )
+    diagnostico["error"] = diagnostico["valor_real"] - diagnostico["prediccion"]
 
-    diagnostico["error_absoluto"] = (
-        diagnostico["error"].abs()
-    )
+    diagnostico["error_absoluto"] = diagnostico["error"].abs()
 
-    diagnostico["error_cuadratico"] = (
-        diagnostico["error"] ** 2
-    )
+    diagnostico["error_cuadratico"] = diagnostico["error"] ** 2
 
     return diagnostico, metricas

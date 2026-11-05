@@ -39,6 +39,15 @@ def params_prueba():
         },
         "modelado": {
             "semilla": 42,
+            "hiperparametros": {
+                "hist_gradient_boosting": {
+                    "loss": ["poisson"],
+                    "learning_rate": [0.1],
+                    "max_iter": [500],
+                    "max_leaf_nodes": [63],
+                    "min_samples_leaf": [20],
+                },
+            },
         },
     }
 

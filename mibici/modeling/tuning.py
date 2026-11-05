@@ -1,25 +1,23 @@
-
 """Ajuste de hiperparámetros con validación temporal para MiBici."""
 
+from pathlib import Path
+
+from loguru import logger
 import numpy as np
 import pandas as pd
-from sklearn.linear_model import Ridge
 from sklearn.base import clone
 from sklearn.ensemble import HistGradientBoostingRegressor
+from sklearn.linear_model import Ridge
 from sklearn.model_selection import ParameterSampler
-from pathlib import Path
-from loguru import logger
 
 from mibici.config import cargar_parametros
-from mibici.modeling.pipeline import crear_pipeline
-from mibici.modeling.validation import WalkForwardSplitter, evaluar_walk_forward
-from mibici.modeling.validation import METRICAS
-
 from mibici.modeling.checkpoints import (
     cargar_checkpoint,
     guardar_checkpoint,
     identificar_ejecucion,
 )
+from mibici.modeling.pipeline import crear_pipeline
+from mibici.modeling.validation import METRICAS, WalkForwardSplitter, evaluar_walk_forward
 
 
 def seleccionar_alpha_ridge(X, y, params=None):
@@ -54,7 +52,7 @@ def seleccionar_alpha_ridge(X, y, params=None):
     for alpha in candidatos:
         modelo = crear_pipeline(Ridge(alpha=alpha), params=params)
 
-        tabla, resumen = evaluar_walk_forward(
+        _, resumen = evaluar_walk_forward(
             modelo=modelo,
             X=X,
             y=np.asarray(y),
@@ -93,9 +91,7 @@ def evaluar_ridge_ajustado(datos: pd.DataFrame, params=None):
     faltantes = columnas_requeridas - set(datos.columns)
 
     if faltantes:
-        raise ValueError(
-            f"Faltan columnas requeridas: {sorted(faltantes)}"
-        )
+        raise ValueError(f"Faltan columnas requeridas: {sorted(faltantes)}")
 
     X = datos.drop(columns=["salidas_siguiente_hora"])
     y = datos["salidas_siguiente_hora"].to_numpy()
@@ -104,9 +100,7 @@ def evaluar_ridge_ajustado(datos: pd.DataFrame, params=None):
 
     resultados = []
 
-    for ventana, (entrenamiento, prueba) in enumerate(
-        splitter.split(X, y), start=1
-    ):
+    for ventana, (entrenamiento, prueba) in enumerate(splitter.split(X, y), start=1):
         X_entrenamiento = X.iloc[entrenamiento]
         y_entrenamiento = y[entrenamiento]
 
@@ -150,12 +144,9 @@ def evaluar_ridge_ajustado(datos: pd.DataFrame, params=None):
 
     for nombre in METRICAS:
         resumen[f"{nombre}_media"] = float(tabla[nombre].mean())
-        resumen[f"{nombre}_desv"] = float(
-            tabla[nombre].std(ddof=0)
-        )
+        resumen[f"{nombre}_desv"] = float(tabla[nombre].std(ddof=0))
 
     return tabla, resumen
-
 
 
 def seleccionar_hiperparametros_hgb(
@@ -208,58 +199,36 @@ def seleccionar_hiperparametros_hgb(
         identificador = identificar_ejecucion(X, y, params)
         ruta_ejecucion = Path(checkpoint_dir) / identificador
 
-        logger.info(
-            f"Checkpoints HGB: {ruta_ejecucion}"
-        )
+        logger.info(f"Checkpoints HGB: {ruta_ejecucion}")
 
     resultados = []
 
     for indice, candidato in enumerate(candidatos, start=1):
         # Convertir valores de NumPy a tipos JSON compatibles.
         parametros = {
-            clave: (
-                valor.item()
-                if isinstance(valor, np.generic)
-                else valor
-            )
+            clave: (valor.item() if isinstance(valor, np.generic) else valor)
             for clave, valor in candidato.items()
         }
 
         ruta_checkpoint = (
-            ruta_ejecucion / f"candidato_{indice:02d}.json"
-            if ruta_ejecucion is not None
-            else None
+            ruta_ejecucion / f"candidato_{indice:02d}.json" if ruta_ejecucion is not None else None
         )
 
-        checkpoint = (
-            cargar_checkpoint(ruta_checkpoint)
-            if ruta_checkpoint is not None
-            else None
-        )
+        checkpoint = cargar_checkpoint(ruta_checkpoint) if ruta_checkpoint is not None else None
 
         if checkpoint is not None:
             if checkpoint.get("parametros") != parametros:
-                raise ValueError(
-                    f"Checkpoint incompatible: {ruta_checkpoint}"
-                )
+                raise ValueError(f"Checkpoint incompatible: {ruta_checkpoint}")
 
             metricas = checkpoint["metricas"]
 
             if not np.isfinite(metricas["mae_media"]):
-                raise ValueError(
-                    f"Checkpoint con MAE inválido: {ruta_checkpoint}"
-                )
+                raise ValueError(f"Checkpoint con MAE inválido: {ruta_checkpoint}")
 
-            logger.info(
-                f"HGB candidato {indice}/{len(candidatos)} "
-                "recuperado del checkpoint."
-            )
+            logger.info(f"HGB candidato {indice}/{len(candidatos)} recuperado del checkpoint.")
 
         else:
-            logger.info(
-                f"Entrenando HGB candidato "
-                f"{indice}/{len(candidatos)}: {parametros}"
-            )
+            logger.info(f"Entrenando HGB candidato {indice}/{len(candidatos)}: {parametros}")
 
             estimador = HistGradientBoostingRegressor(
                 **parametros,
@@ -276,11 +245,7 @@ def seleccionar_hiperparametros_hgb(
             )
 
             metricas = {
-                nombre: (
-                    float(valor)
-                    if np.isfinite(valor)
-                    else None
-                )
+                nombre: (float(valor) if np.isfinite(valor) else None)
                 for nombre, valor in (
                     (clave, resumen[clave])
                     for clave in (
@@ -292,9 +257,7 @@ def seleccionar_hiperparametros_hgb(
             }
 
             if metricas["mae_media"] is None:
-                raise ValueError(
-                    "La búsqueda produjo valores MAE no válidos."
-                )
+                raise ValueError("La búsqueda produjo valores MAE no válidos.")
 
             if ruta_checkpoint is not None:
                 guardar_checkpoint(
@@ -324,18 +287,13 @@ def seleccionar_hiperparametros_hgb(
 
     mejor_indice = tabla["mae_media"].idxmin()
 
-    mejores_parametros = {
-        clave: tabla.loc[mejor_indice, clave]
-        for clave in espacio
-    }
+    mejores_parametros = {clave: tabla.loc[mejor_indice, clave] for clave in espacio}
 
     logger.success(
-        f"Búsqueda HGB completada. "
-        f"Mejor MAE: {tabla.loc[mejor_indice, 'mae_media']:.6f}"
+        f"Búsqueda HGB completada. Mejor MAE: {tabla.loc[mejor_indice, 'mae_media']:.6f}"
     )
 
     return mejores_parametros, tabla
-
 
 
 def evaluar_hgb_ajustado(
@@ -352,9 +310,7 @@ def evaluar_hgb_ajustado(
     faltantes = columnas_requeridas - set(datos.columns)
 
     if faltantes:
-        raise ValueError(
-            f"Faltan columnas requeridas: {sorted(faltantes)}"
-        )
+        raise ValueError(f"Faltan columnas requeridas: {sorted(faltantes)}")
 
     X = datos.drop(columns=["salidas_siguiente_hora"])
     y = datos["salidas_siguiente_hora"].to_numpy()
@@ -374,28 +330,16 @@ def evaluar_hgb_ajustado(
 
     resultados = []
 
-    for ventana, (entrenamiento, prueba) in enumerate(
-        splitter.split(X, y), start=1
-    ):
+    for ventana, (entrenamiento, prueba) in enumerate(splitter.split(X, y), start=1):
         mes_prueba = str(splitter.meses_prueba[ventana - 1])
 
         ruta_ventana = (
-            ruta_ejecucion / f"ventana_{ventana:02d}"
-            if ruta_ejecucion is not None
-            else None
+            ruta_ejecucion / f"ventana_{ventana:02d}" if ruta_ejecucion is not None else None
         )
 
-        ruta_resultado = (
-            ruta_ventana / "resultado.json"
-            if ruta_ventana is not None
-            else None
-        )
+        ruta_resultado = ruta_ventana / "resultado.json" if ruta_ventana is not None else None
 
-        checkpoint = (
-            cargar_checkpoint(ruta_resultado)
-            if ruta_resultado is not None
-            else None
-        )
+        checkpoint = cargar_checkpoint(ruta_resultado) if ruta_resultado is not None else None
 
         if checkpoint is not None:
             fila = checkpoint.get("resultado")
@@ -405,27 +349,18 @@ def evaluar_hgb_ajustado(
                 or fila.get("mes_prueba") != mes_prueba
                 or fila.get("n_entrenamiento") != len(entrenamiento)
                 or fila.get("n_prueba") != len(prueba)
-                or any(
-                    not np.isfinite(fila.get(nombre, float("nan")))
-                    for nombre in METRICAS
-                )
+                or any(not np.isfinite(fila.get(nombre, float("nan"))) for nombre in METRICAS)
             ):
-                raise ValueError(
-                    f"Checkpoint de ventana incompatible: {ruta_resultado}"
-                )
+                raise ValueError(f"Checkpoint de ventana incompatible: {ruta_resultado}")
 
             logger.info(
-                f"HGB ventana {ventana}/{len(splitter.meses_prueba)} "
-                f"({mes_prueba}) recuperada."
+                f"HGB ventana {ventana}/{len(splitter.meses_prueba)} ({mes_prueba}) recuperada."
             )
 
             resultados.append(fila)
             continue
 
-        logger.info(
-            f"Iniciando HGB ventana "
-            f"{ventana}/{len(splitter.meses_prueba)}: {mes_prueba}"
-        )
+        logger.info(f"Iniciando HGB ventana {ventana}/{len(splitter.meses_prueba)}: {mes_prueba}")
 
         X_entrenamiento = X.iloc[entrenamiento]
         y_entrenamiento = y[entrenamiento]
@@ -442,9 +377,7 @@ def evaluar_hgb_ajustado(
         if ruta_ventana is not None:
             argumentos["checkpoint_dir"] = ruta_ventana / "candidatos"
 
-        mejores_parametros, _ = seleccionar_hiperparametros_hgb(
-            **argumentos
-        )
+        mejores_parametros, _ = seleccionar_hiperparametros_hgb(**argumentos)
 
         estimador = HistGradientBoostingRegressor(
             **mejores_parametros,
@@ -462,11 +395,7 @@ def evaluar_hgb_ajustado(
             "n_entrenamiento": len(entrenamiento),
             "n_prueba": len(prueba),
             **{
-                clave: (
-                    valor.item()
-                    if isinstance(valor, np.generic)
-                    else valor
-                )
+                clave: (valor.item() if isinstance(valor, np.generic) else valor)
                 for clave, valor in mejores_parametros.items()
             },
         }
@@ -495,6 +424,3 @@ def evaluar_hgb_ajustado(
         resumen[f"{nombre}_desv"] = float(tabla[nombre].std(ddof=0))
 
     return tabla, resumen
-
-
-

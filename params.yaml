@@ -50,13 +50,24 @@ modelado:
   # Nombres de los parámetros del estimador, sin el prefijo del Pipeline
   hiperparametros:
     ridge:
-      alpha: [0.1, 1.0, 10.0, 100.0]
+      # En la primera corrida se eligió alpha=100 (el máximo) en las 6 ventanas:
+      # se amplía hacia valores mayores para no quedar en el borde de la rejilla.
+      alpha: [10.0, 100.0, 1000.0, 10000.0]
     hist_gradient_boosting:
       loss: [poisson]
       learning_rate: [0.05, 0.1]
       max_iter: [200, 500]
-      max_leaf_nodes: [31, 63]
-      min_samples_leaf: [20, 100]
+      # Con max_leaf_nodes=63 y min_samples_leaf=20 el modelo predijo ~15 762 salidas en
+      # una hora (junio, RMSE 57): con enlace logarítmico (Poisson), hojas pequeñas dan
+      # valores extremos. Se dejan solo hojas grandes y se agrega regularización L2.
+      max_leaf_nodes: [15, 31]
+      min_samples_leaf: [100, 200]
+      l2_regularization: [0.0, 1.0]
+
+# Figuras de diagnóstico de errores (mibici/modeling/error_plots.py)
+analisis_errores:
+  top_estaciones: 10  # estaciones con mayor error cuadrático en la figura por estación
+  n_estaciones_criticas: 4  # estaciones de la hora con mayor RMSE en la figura de extremos
 
 mlflow:
   experimento: mibici-fase2-modelado
