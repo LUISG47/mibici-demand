@@ -219,3 +219,67 @@ def test_cli_predict_salida_csv_conserva_identificadores(mlflow_predict_temporal
     )
     np.testing.assert_array_equal(salida["salidas_reales"], datos["salidas_siguiente_hora"])
     assert (salida["salidas_predichas"] >= 0).all()
+
+
+def params_serving(fuente, directorio="exportado"):
+    """Sección serving: mínima para cargar_modelo_servicio."""
+    return {
+        "serving": {
+            "modelo_registrado": "mibici-demanda-salidas",
+            "version": 1,
+            "directorio_modelo": directorio,
+            "fuente": fuente,
+        }
+    }
+
+
+def test_cargar_modelo_servicio_local_y_registry(mlflow_predict_temporal, tmp_path, monkeypatch):
+    """Con fuente local carga models/<directorio>; con registry, models:/<nombre>/<versión>."""
+    modelo_original, X = registrar_modelo_champion_dummy()
+    mlflow.artifacts.download_artifacts(
+        artifact_uri="models:/mibici-demanda-salidas/1", dst_path=str(tmp_path / "exportado")
+    )
+    monkeypatch.setattr(predict, "MODELS_DIR", tmp_path)
+
+    local = predict.cargar_modelo_servicio(params_serving("local"))
+    registry = predict.cargar_modelo_servicio(params_serving("registry"))
+
+    esperado = modelo_original.predict(X)
+    np.testing.assert_array_equal(local.predict(X), esperado)
+    np.testing.assert_array_equal(registry.predict(X), esperado)
+
+
+def test_cargar_modelo_servicio_errores(tmp_path, monkeypatch):
+    """Una fuente desconocida o una carpeta inexistente dan un error claro."""
+    monkeypatch.setattr(predict, "MODELS_DIR", tmp_path)
+
+    with pytest.raises(ValueError, match="serving.fuente"):
+        predict.cargar_modelo_servicio(params_serving("s3"))
+
+    with pytest.raises(FileNotFoundError, match="modelo exportado"):
+        predict.cargar_modelo_servicio(params_serving("local", directorio="no-existe"))
+
+
+def test_cli_predict_con_modelo_exportado(mlflow_predict_temporal, tmp_path):
+    """Con --modelo-dir el CLI usa la carpeta exportada en lugar del Registry."""
+    registrar_modelo_champion_dummy()
+    modelo_dir = tmp_path / "exportado"
+    mlflow.artifacts.download_artifacts(
+        artifact_uri="models:/mibici-demanda-salidas/1", dst_path=str(modelo_dir)
+    )
+    entrada_path = tmp_path / "entrada.parquet"
+    salida_path = tmp_path / "salida.parquet"
+    generar_datos_prueba().to_parquet(entrada_path, index=False)
+
+    resultado = CliRunner().invoke(
+        predict.app,
+        [
+            "--datos-path", str(entrada_path),
+            "--salida-path", str(salida_path),
+            "--modelo-dir", str(modelo_dir),
+            "--modelo-nombre", "modelo-inexistente",  # se ignora: manda --modelo-dir
+        ],
+    )  # fmt: skip
+
+    assert resultado.exit_code == 0, resultado.output
+    assert len(pd.read_parquet(salida_path)) == 10

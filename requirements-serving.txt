@@ -1,0 +1,23 @@
+# Dependencias mínimas para servir el modelo (imagen Docker).
+# Mismas versiones fijas que requirements.txt; lo de desarrollo (notebooks, pruebas,
+# gráficas, pyarrow) se queda fuera para que la imagen sea ligera.
+
+# Modelo: Pipeline de scikit-learn guardado como modelo MLflow (cloudpickle)
+pandas==3.0.6
+scikit-learn==1.9.1
+# Misma versión que mlflow==3.17.1, sin servidor de tracking, UI ni SQLAlchemy
+mlflow-skinny==3.17.1
+numpy==2.5.4
+scipy==1.18.1
+cloudpickle==3.1.2
+
+# Código del proyecto (mibici.config y predict.py)
+pyyaml==6.0.3
+loguru==0.7.3
+python-dotenv==1.2.4
+typer==0.27.3
+
+# API
+fastapi==0.149.0
+uvicorn==0.54.0
+pydantic==2.14.1

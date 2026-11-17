@@ -1,0 +1,22 @@
+# Solo entra a la imagen lo necesario para servir: params.yaml, mibici/, models/ y
+# requirements-serving.txt. Los datos y el registro de MLflow nunca se copian.
+data/
+mlruns/
+mlartifacts/
+mlflow.db
+.venv/
+notebooks/
+reports/
+tests/
+docs/
+references/
+.git/
+.github/
+.claude/
+.env
+**/__pycache__/
+**/*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+.DS_Store
