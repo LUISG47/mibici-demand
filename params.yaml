@@ -72,3 +72,12 @@ analisis_errores:
 mlflow:
   experimento: mibici-fase2-modelado
   modelo_registrado: mibici-demanda-salidas
+
+# Servicio del modelo: exportación a models/, API y Docker (mibici/modeling/export_model.py)
+serving:
+  modelo_registrado: mibici-demanda-salidas
+  version: 1
+  directorio_modelo: mibici-demanda-salidas-v1  # carpeta dentro de models/
+  # local: models/<directorio_modelo> (lo que usa Docker)
+  # registry: models:/<modelo_registrado>/<version> (necesita mlflow.db; solo fuera de Docker)
+  fuente: local

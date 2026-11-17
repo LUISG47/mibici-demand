@@ -8,9 +8,38 @@ import numpy as np
 import pandas as pd
 import typer
 
-from mibici.config import MLFLOW_TRACKING_URI, PROCESSED_DATA_DIR, cargar_parametros
+from mibici.config import MLFLOW_TRACKING_URI, MODELS_DIR, PROCESSED_DATA_DIR, cargar_parametros
 
 app = typer.Typer()
+
+
+def cargar_modelo_exportado(ruta: Path):
+    """Carga un modelo MLflow exportado a disco (por ejemplo models/mibici-demanda-salidas-v1)."""
+    if not Path(ruta).exists():
+        raise FileNotFoundError(f"No existe el modelo exportado: {ruta}")
+
+    logger.info(f"Cargando modelo exportado desde: {ruta}")
+    return mlflow.sklearn.load_model(str(ruta))
+
+
+def cargar_modelo_servicio(params: dict | None = None):
+    """Carga el modelo para servir según la sección serving: de params.yaml.
+
+    - fuente "local": models/<directorio_modelo> (no necesita mlflow.db; es lo que usa Docker).
+    - fuente "registry": models:/<modelo_registrado>/<version> del registro del proyecto.
+    """
+    serving = (params or cargar_parametros())["serving"]
+
+    if serving["fuente"] == "local":
+        return cargar_modelo_exportado(MODELS_DIR / serving["directorio_modelo"])
+
+    if serving["fuente"] == "registry":
+        mlflow.set_tracking_uri(MLFLOW_TRACKING_URI)
+        uri = f"models:/{serving['modelo_registrado']}/{serving['version']}"
+        logger.info(f"Cargando modelo desde MLflow Model Registry: {uri}")
+        return mlflow.sklearn.load_model(uri)
+
+    raise ValueError(f"serving.fuente debe ser 'local' o 'registry', no {serving['fuente']!r}")
 
 
 def cargar_modelo(
@@ -50,8 +79,12 @@ def main(
     salida_path: Path = PROCESSED_DATA_DIR / "predicciones.parquet",
     alias: str = "champion",
     modelo_nombre: str | None = None,
+    modelo_dir: Path | None = None,
 ):
-    """Ejecuta inferencia por lotes sobre un dataset y guarda las predicciones."""
+    """Ejecuta inferencia por lotes sobre un dataset y guarda las predicciones.
+
+    Con --modelo-dir se usa un modelo exportado (models/...) en lugar del Registry.
+    """
     if not datos_path.exists():
         raise FileNotFoundError(f"No existe el archivo de entrada: {datos_path}")
 
@@ -60,7 +93,10 @@ def main(
         pd.read_parquet(datos_path) if datos_path.suffix == ".parquet" else pd.read_csv(datos_path)
     )
 
-    modelo = cargar_modelo(nombre=modelo_nombre, alias=alias)
+    if modelo_dir is not None:
+        modelo = cargar_modelo_exportado(modelo_dir)
+    else:
+        modelo = cargar_modelo(nombre=modelo_nombre, alias=alias)
     y_pred = predecir(datos, modelo=modelo)
 
     columnas_id = [

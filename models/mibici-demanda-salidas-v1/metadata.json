@@ -1,0 +1,57 @@
+{
+  "modelo_uri": "models:/mibici-demanda-salidas/1",
+  "modelo_registrado": "mibici-demanda-salidas",
+  "version": 1,
+  "aliases": [
+    "champion"
+  ],
+  "run_id": "c91b95f79144492d884a3bc0c4250940",
+  "metricas_promedio": {
+    "mae_media": 0.7501554756715733,
+    "mae_desv": 0.03945697931724342,
+    "rmse_media": 1.3092180401244862,
+    "rmse_desv": 0.08718280268375087,
+    "wape_media": 0.6255814274593757,
+    "wape_desv": 0.028546326716288574
+  },
+  "hiperparametros": {
+    "algoritmo": "hgb_poisson",
+    "horizonte_horas": "1",
+    "rezagos": "1,24,168",
+    "validacion": "walk_forward",
+    "loss": "poisson",
+    "learning_rate": "0.1",
+    "max_iter": "500",
+    "max_leaf_nodes": "31",
+    "min_samples_leaf": "100",
+    "l2_regularization": "1.0"
+  },
+  "git_commit": "a35962884eeaf21d505d2d03f7129ea899d48f21",
+  "git_commit_exportacion": "9458bbe9ad6f8f3dfbbb63b25736c5f572ea179a",
+  "git_cambios_sin_commit_exportacion": true,
+  "fecha_exportacion": "2026-11-17T19:38:42+00:00",
+  "columnas_entrada": [
+    "estacion_id",
+    "fecha_hora",
+    "hora",
+    "dia_semana",
+    "mes",
+    "fin_semana",
+    "salidas_lag_1",
+    "llegadas_lag_1",
+    "salidas_lag_24",
+    "llegadas_lag_24",
+    "salidas_lag_168",
+    "llegadas_lag_168",
+    "festivo",
+    "hora_sin",
+    "hora_cos",
+    "dia_semana_sin",
+    "dia_semana_cos",
+    "mes_sin",
+    "mes_cos",
+    "fecha_objetivo"
+  ],
+  "sha256_model_pkl": "582d564521c5bd194307791016a33a36e90bcb7675ab2e4866004daefb8777b7",
+  "mlflow_version": "3.17.1"
+}
