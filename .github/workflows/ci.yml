@@ -1,0 +1,45 @@
+# CI de mibici-demand: lint y pruebas en cada PR y en cada push a main.
+# Las pruebas no necesitan data/ ni mlflow.db: usan datos sintéticos y MLflow temporal.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# Si llega un push nuevo al mismo PR, se cancela la corrida anterior
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  lint-y-pruebas:
+    name: Lint y pruebas
+    # ubuntu-latest (26.04) no tiene Python 3.12.2 en actions/setup-python; 22.04 sí
+    runs-on: ubuntu-22.04
+    timeout-minutes: 20
+    env:
+      MLFLOW_DISABLE_AGENT_HINT: "1"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Python 3.12.2 (misma versión que el .venv y la imagen Docker)
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.12.2"
+          cache: pip
+          cache-dependency-path: requirements.txt
+
+      - name: Instalar dependencias
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+
+      - name: Lint (ruff)
+        run: make lint
+
+      - name: Pruebas
+        run: pytest -q
