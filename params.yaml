@@ -82,6 +82,7 @@ serving:
   # registry: models:/<modelo_registrado>/<version> (necesita mlflow.db; solo fuera de Docker)
   fuente: local
 
+
 # Simulación y detección de data drift (Issue #39)
 drift:
   mes_referencia: "2026-09"
@@ -104,3 +105,10 @@ drift:
     psi_critico: 0.25
     ks_pvalor: 0.05
     deterioro_mae_relativo: 0.10
+
+api:
+  titulo: "MiBici Demand API"
+  descripcion: "Servicio de pronóstico de salidas de bicicletas por estación y hora (horizonte 1 h)."
+  version: "1.0.0"
+  max_lote: 5000
+
