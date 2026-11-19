@@ -22,6 +22,23 @@ Pronóstico de demanda de bicicletas por estación y por hora con los
 [datos abiertos de MiBici Guadalajara](https://mibici.net/en/open-data/). El objetivo es
 anticipar qué estaciones van a quedar vacías o llenas para rebalancear bicicletas a tiempo.
 
+## Índice
+
+- [Equipo](#equipo)
+- [Pipeline](#pipeline)
+- [Estado del proyecto](#estado-del-proyecto)
+  - [Entrega final](#entrega-final-)
+- [Configuración y validación](#configuración-y-validación)
+- [Fase 2: modelado de principio a fin](#fase-2-modelado-de-principio-a-fin)
+- [Instalación](#instalación)
+- [Descarga de datos](#descarga-de-datos)
+- [Limpieza y versionado de datos con MLflow](#limpieza-y-versionado-de-datos-con-mlflow)
+  - [Reglas, en el orden en que se aplican](#reglas-en-el-orden-en-que-se-aplican)
+- [Pruebas](#pruebas)
+- [Modelo desplegable](#modelo-desplegable)
+- [Docker](#docker)
+- [Project Organization](#project-organization)
+
 ## Equipo
 
 | Integrante | Matrícula | Rol | GitHub |
@@ -67,6 +84,8 @@ python -m mibici.features v2
 python -m mibici.features v3
 ```
 
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
 ## Estado del proyecto
 
 | Fase | Estado | Entrega |
@@ -111,6 +130,8 @@ python -m mibici.features v3
 
 Para colaborar, revisa [CONTRIBUTING.md](CONTRIBUTING.md).
 
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
 ## Configuración y validación
 
 Los parámetros del proyecto (meses de datos, umbrales de limpieza, horizonte, rezagos,
@@ -137,6 +158,8 @@ run_id = registrar_evaluacion("ridge", tabla, resumen, hiperparametros)
 En MLflow cada modelo tiene un run padre con las métricas promedio y un run anidado por
 ventana. `registrar_modelo(run_id, ..., alias="champion")` lo registra como
 `mibici-demanda-salidas` y se carga con `models:/mibici-demanda-salidas@champion`.
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
 ## Fase 2: modelado de principio a fin
 
@@ -178,6 +201,8 @@ mlflow ui --backend-store-uri sqlite:///$PWD/mlflow.db
   muestra la comparación registrada en MLflow y predice con el champion; se ejecuta
   después del paso 2.
 
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
 ## Instalación
 
 ```bash
@@ -185,6 +210,8 @@ python3 -m venv .venv
 source .venv/bin/activate
 pip install -r requirements.txt
 ```
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
 ## Descarga de datos
 
@@ -209,6 +236,8 @@ make data
 - Avisa en consola qué meses del rango no tienen enlace (por ejemplo, meses aún no publicados).
 - Las carpetas de `data/` se crean solas la primera vez (`mibici/config.py`).
 - También se puede usar desde Python: `from mibici.dataset import descargar_meses`.
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
 ## Limpieza y versionado de datos con MLflow
 
@@ -255,6 +284,8 @@ modificadas; en la regla 9 cuenta los viajes **fuera** del catálogo.
 
 Resultado con 2025-10 a 2026-09: **4,497,877 → 4,354,416 viajes** (se elimina el 3.2%).
 
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
 ## Pruebas
 
 Todas las pruebas corren con un solo comando desde la raíz del repo (con el `.venv`
@@ -278,6 +309,8 @@ make test        # equivalente a python -m pytest tests
 
 El workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre `make lint` y
 `pytest -q` con Python 3.12.2 en cada Pull Request y en cada push a `main`.
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
 ## Modelo desplegable
 
@@ -306,6 +339,8 @@ Desde Python, `cargar_modelo_servicio()` de `mibici/modeling/predict.py` carga e
 según `serving.fuente` de `params.yaml`: `local` (la carpeta de `models/`, lo que usa
 Docker) o `registry` (`models:/<nombre>/<versión>`).
 
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
 ## Docker
 
 La imagen se construye con [`Dockerfile`](Dockerfile) sobre `python:3.12.2-slim`, instala
@@ -321,6 +356,8 @@ docker run -p 8000:8000 ml-service:latest
 > El contenedor arranca la API (`uvicorn mibici.api.main:app` en el puerto 8000) cuando se
 > integre el servicio del #37; mientras tanto la imagen ya construye y reproduce las
 > predicciones de `predict.py`. La liga de DockerHub se agregará al publicar la imagen (#40).
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
 ## Project Organization
 
@@ -388,5 +425,7 @@ docker run -p 8000:8000 ml-service:latest
 
 `data/` (crudos, intermedios y procesados), `mlflow.db` y `mlruns/` se generan localmente
 y no se suben a Git: los datos se versionan en MLflow.
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
 --------
