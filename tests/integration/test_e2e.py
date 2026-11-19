@@ -2,7 +2,6 @@
 
 from copy import deepcopy
 
-from joblib import dump, load
 import mlflow
 import numpy as np
 import pandas as pd
@@ -11,8 +10,29 @@ from sklearn.linear_model import Ridge
 
 from mibici.config import cargar_parametros
 from mibici.features import generar_dataset_v3
+from mibici.modeling import predict, tracking
 from mibici.modeling.pipeline import crear_pipeline
 from mibici.modeling.validation import WalkForwardSplitter, mae, rmse, wape
+
+
+@pytest.fixture
+def mlflow_integracion_temporal(tmp_path, monkeypatch):
+    """Aísla MLflow y el Model Registry del proyecto."""
+
+    uri_anterior = mlflow.get_tracking_uri()
+    uri_temporal = f"sqlite:///{tmp_path / 'mlflow_integracion.db'}"
+
+    monkeypatch.setattr(tracking, "MLFLOW_TRACKING_URI", uri_temporal)
+    monkeypatch.setattr(predict, "MLFLOW_TRACKING_URI", uri_temporal)
+    monkeypatch.setattr(
+        tracking,
+        "MLFLOW_ARTIFACTS_DIR",
+        tmp_path / "mlruns",
+    )
+
+    yield uri_temporal
+
+    mlflow.set_tracking_uri(uri_anterior)
 
 
 def crear_viajes_sinteticos():
@@ -42,7 +62,7 @@ def crear_viajes_sinteticos():
     return pd.DataFrame(registros)
 
 
-def test_flujo_completo_con_mlflow_temporal(tmp_path):
+def test_flujo_completo_con_mlflow_temporal(tmp_path, mlflow_integracion_temporal):
     """Comprueba el flujo completo sin depender de datos reales."""
 
     # 1. Crear, guardar y cargar datos sintéticos
@@ -103,29 +123,81 @@ def test_flujo_completo_con_mlflow_temporal(tmp_path):
     assert all(np.isfinite(valor) for valor in metricas.values())
     assert all(valor >= 0 for valor in metricas.values())
 
-    # 6. Registrar los resultados en MLflow temporal
-    uri_anterior = mlflow.get_tracking_uri()
-    uri_temporal = f"sqlite:///{tmp_path / 'mlflow_integracion.db'}"
+    # 6. Registrar la evaluación con el módulo real de tracking
+    tabla = pd.DataFrame(
+        [
+            {
+                "ventana": 1,
+                "mes_prueba": "2026-04",
+                "n_entrenamiento": len(entrenamiento),
+                "n_prueba": len(prueba),
+                **metricas,
+            }
+        ]
+    )
 
-    try:
-        mlflow.set_tracking_uri(uri_temporal)
-        mlflow.set_experiment("prueba-integracion-e2e")
+    resumen = {f"{nombre}_media": float(valor) for nombre, valor in metricas.items()}
 
-        with mlflow.start_run(run_name="flujo_sintetico") as run:
-            mlflow.log_param("fuente", "sintetica")
-            mlflow.log_param("registros", len(datos))
-            mlflow.log_metrics(metricas)
+    hiperparametros = {
+        "algoritmo": "Ridge",
+        "alpha": 1.0,
+        "fuente": "sintetica",
+    }
 
-        cliente = mlflow.MlflowClient(tracking_uri=uri_temporal)
-        registro = cliente.get_run(run.info.run_id)
+    tracking.configurar_mlflow("prueba-integracion-e2e")
 
-        assert registro.info.status == "FINISHED"
-        assert registro.data.metrics["mae"] == pytest.approx(metricas["mae"])
-        assert registro.data.metrics["rmse"] == pytest.approx(metricas["rmse"])
-        assert registro.data.metrics["wape"] == pytest.approx(metricas["wape"])
+    run_id = tracking.registrar_evaluacion(
+        nombre_modelo="ridge_integracion",
+        tabla=tabla,
+        resumen=resumen,
+        hiperparametros=hiperparametros,
+        modelo_final=modelo,
+        X_ejemplo=X.iloc[entrenamiento].tail(5),
+    )
 
-    finally:
-        mlflow.set_tracking_uri(uri_anterior)
+    # 7. Registrar el modelo con alias champion
+    version = tracking.registrar_modelo(
+        run_id=run_id,
+        hiperparametros=hiperparametros,
+        metricas=resumen,
+        nombre="mibici-integracion-e2e",
+        alias="champion",
+    )
+
+    assert int(version.version) == 1
+
+    # 8. Verificar las métricas del run en MLflow
+    cliente = mlflow.MlflowClient(tracking_uri=mlflow_integracion_temporal)
+
+    registro = cliente.get_run(run_id)
+
+    assert registro.info.status == "FINISHED"
+
+    for nombre, valor in resumen.items():
+        assert registro.data.metrics[nombre] == pytest.approx(valor)
+
+    # 9. Recuperar el modelo desde el Registry
+    modelo_cargado = predict.cargar_modelo(
+        nombre="mibici-integracion-e2e",
+        alias="champion",
+    )
+
+    # 10. Predecir mediante el módulo real de inferencia
+    predicciones_recuperadas = predict.predecir(
+        X.iloc[prueba],
+        modelo=modelo_cargado,
+    )
+
+    predicciones_esperadas = np.clip(
+        modelo.predict(X.iloc[prueba]),
+        0,
+        None,
+    )
+
+    np.testing.assert_allclose(
+        predicciones_recuperadas,
+        predicciones_esperadas,
+    )
 
 
 def test_rechaza_viajes_con_fechas_nulas():
@@ -165,31 +237,75 @@ def preparar_datos_integracion():
     return params, X, y, entrenamiento, prueba
 
 
-def test_reproducibilidad_modelo_guardado(tmp_path):
-    """Comprueba que el modelo conserva sus predicciones al cargarlo."""
+def test_reproducibilidad_modelo_guardado(mlflow_integracion_temporal):
+    """Verifica la reproducibilidad usando MLflow Model Registry."""
 
     params, X, y, entrenamiento, prueba = preparar_datos_integracion()
 
-    # Entrenar el Pipeline completo
+    # Entrenar el Pipeline real
     modelo = crear_pipeline(Ridge(alpha=1.0), params=params)
     modelo.fit(X.iloc[entrenamiento], y[entrenamiento])
 
-    # Predicciones antes de guardar
-    predicciones_originales = modelo.predict(X.iloc[prueba])
+    datos_prueba = X.iloc[prueba]
 
-    # Guardar el modelo en un directorio temporal
-    ruta_modelo = tmp_path / "modelo_integracion.joblib"
-    dump(modelo, ruta_modelo)
+    predicciones_originales = np.clip(
+        modelo.predict(datos_prueba),
+        0,
+        None,
+    )
 
-    assert ruta_modelo.exists()
+    metricas = {
+        "mae": mae(y[prueba], modelo.predict(datos_prueba)),
+        "rmse": rmse(y[prueba], modelo.predict(datos_prueba)),
+        "wape": wape(y[prueba], modelo.predict(datos_prueba)),
+    }
 
-    # Cargar nuevamente el modelo
-    modelo_cargado = load(ruta_modelo)
+    resumen = {f"{nombre}_media": float(valor) for nombre, valor in metricas.items()}
 
-    # Repetir las predicciones con los mismos datos
-    predicciones_recuperadas = modelo_cargado.predict(X.iloc[prueba])
+    tabla = pd.DataFrame(
+        [
+            {
+                "ventana": 1,
+                "mes_prueba": "2026-04",
+                "n_entrenamiento": len(entrenamiento),
+                "n_prueba": len(prueba),
+                **metricas,
+            }
+        ]
+    )
 
-    # Los resultados deben permanecer iguales
+    hiperparametros = {"algoritmo": "Ridge", "alpha": 1.0}
+
+    tracking.configurar_mlflow("prueba-reproducibilidad-e2e")
+
+    run_id = tracking.registrar_evaluacion(
+        nombre_modelo="ridge_reproducibilidad",
+        tabla=tabla,
+        resumen=resumen,
+        hiperparametros=hiperparametros,
+        modelo_final=modelo,
+        X_ejemplo=X.iloc[entrenamiento].tail(5),
+    )
+
+    tracking.registrar_modelo(
+        run_id=run_id,
+        hiperparametros=hiperparametros,
+        metricas=resumen,
+        nombre="mibici-reproducibilidad-e2e",
+        alias="champion",
+    )
+
+    # Cargar desde el Registry, no desde joblib
+    modelo_cargado = predict.cargar_modelo(
+        nombre="mibici-reproducibilidad-e2e",
+        alias="champion",
+    )
+
+    predicciones_recuperadas = predict.predecir(
+        datos_prueba,
+        modelo=modelo_cargado,
+    )
+
     np.testing.assert_allclose(
         predicciones_originales,
         predicciones_recuperadas,
