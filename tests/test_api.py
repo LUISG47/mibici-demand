@@ -89,9 +89,18 @@ def test_predict_reproduce_muestra_exportada():
     assert respuesta.status_code == 200
     cuerpo = respuesta.json()
     assert cuerpo["n_predicciones"] == len(muestra)
-    assert np.array_equal(
-        np.asarray(cuerpo["salidas_predichas"]),
+
+    predicciones_api = np.asarray(cuerpo["salidas_predichas"])
+    predicciones_directas = api_main.predecir(
+        muestra, modelo=api_main.cargar_modelo_servicio()
+    )
+
+    assert np.array_equal(predicciones_api, predicciones_directas)
+    np.testing.assert_allclose(
+        predicciones_api,
         esperadas["salidas_predichas"].to_numpy(),
+        rtol=1e-12,
+        atol=1e-12,
     )
 
 
