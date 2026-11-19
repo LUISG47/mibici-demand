@@ -81,3 +81,10 @@ serving:
   # local: models/<directorio_modelo> (lo que usa Docker)
   # registry: models:/<modelo_registrado>/<version> (necesita mlflow.db; solo fuera de Docker)
   fuente: local
+
+api:
+  titulo: "MiBici Demand API"
+  descripcion: "Servicio de pronóstico de salidas de bicicletas por estación y hora (horizonte 1 h)."
+  version: "1.0.0"
+  max_lote: 5000
+
