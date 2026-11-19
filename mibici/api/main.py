@@ -3,6 +3,8 @@
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI, HTTPException, Request, status
+from fastapi.encoders import jsonable_encoder
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from loguru import logger
 from mlflow.exceptions import MlflowException
@@ -59,6 +61,16 @@ def crear_app() -> FastAPI:
 
 
 app = crear_app()
+
+
+@app.exception_handler(RequestValidationError)
+async def manejar_error_validacion(request: Request, exc: RequestValidationError):
+    """Devuelve 422 sin repetir la entrada (puede traer NaN, que no es JSON válido)."""
+    errores = [{k: v for k, v in e.items() if k != "input"} for e in exc.errors()]
+    return JSONResponse(
+        status_code=status.HTTP_422_UNPROCESSABLE_CONTENT,
+        content={"detail": jsonable_encoder(errores)},
+    )
 
 
 @app.get(
@@ -129,10 +141,10 @@ def predict_endpoint(solicitud: SolicitudPrediccion, request: Request) -> Respue
         predicciones = predecir(datos, modelo=modelo)
         lista_predicciones = [float(valor) for valor in predicciones]
     except Exception as exc:
-        logger.error(f"Error durante la inferencia en /predict: {exc}")
+        logger.exception("Error inesperado durante la inferencia en /predict")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error al generar predicciones: {exc}",
+            detail="Error interno al procesar la solicitud de predicción.",
         ) from exc
 
     return RespuestaPrediccion(

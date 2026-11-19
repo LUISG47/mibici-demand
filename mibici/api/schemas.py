@@ -5,6 +5,8 @@ from datetime import datetime
 import pandas as pd
 from pydantic import BaseModel, ConfigDict, Field
 
+from mibici.config import cargar_parametros
+
 # Orden exacto de las 20 columnas de la firma del modelo (models/mibici-demanda-salidas-v1/metadata.json)
 COLUMNAS_ENTRADA: list[str] = [
     "estacion_id",
@@ -94,6 +96,14 @@ EJEMPLO_REGISTRO_2: dict = {
     "mes_cos": -0.5000000000000004,
     "fecha_objetivo": "2026-09-01T06:00:00",
 }
+
+
+def _max_lote_desde_params() -> int:
+    api_cfg = cargar_parametros().get("api", {})
+    limite = int(api_cfg["max_lote"])
+    if limite < 1:
+        raise ValueError("api.max_lote en params.yaml debe ser >= 1.")
+    return limite
 
 
 class RegistroEntrada(BaseModel):
@@ -195,6 +205,7 @@ class SolicitudPrediccion(BaseModel):
     registros: list[RegistroEntrada] = Field(
         ...,
         min_length=1,
+        max_length=_max_lote_desde_params(),
         description="Lista de registros estación-hora a predecir (al menos 1 registro).",
     )
 

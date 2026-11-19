@@ -1,5 +1,7 @@
 """Pruebas automatizadas para el servicio FastAPI de pronóstico de demanda (mibici/api)."""
 
+import json
+
 from fastapi.testclient import TestClient
 import numpy as np
 import pandas as pd
@@ -12,9 +14,16 @@ from mibici.api.schemas import (
     EJEMPLO_REGISTRO_2,
     SolicitudPrediccion,
 )
-from mibici.config import PROJ_ROOT
+from mibici.config import PROJ_ROOT, cargar_parametros
 
 FIXTURES_DIR = PROJ_ROOT / "tests" / "fixtures"
+METADATA_PATH = PROJ_ROOT / "models" / "mibici-demanda-salidas-v1" / "metadata.json"
+
+
+def test_columnas_entrada_sincronizadas_con_metadata():
+    """COLUMNAS_ENTRADA debe coincidir exactamente en nombres y orden con metadata.json."""
+    metadata = json.loads(METADATA_PATH.read_text(encoding="utf-8"))
+    assert COLUMNAS_ENTRADA == metadata["columnas_entrada"]
 
 
 def test_health_ok():
@@ -65,25 +74,24 @@ def test_predict_exitoso_individual_y_lote():
 
 
 def test_predict_reproduce_muestra_exportada():
-    """POST /predict sobre los primeros registros de muestra_v3_1000.csv reproduce predicciones_v1_muestra.csv."""
-    muestra = pd.read_csv(FIXTURES_DIR / "muestra_v3_1000.csv").head(15)
+    """POST /predict sobre las 1000 filas de muestra_v3_1000.csv reproduce exactamente predicciones_v1_muestra.csv."""
+    muestra = pd.read_csv(FIXTURES_DIR / "muestra_v3_1000.csv")
     esperadas = pd.read_csv(
         FIXTURES_DIR / "predicciones_v1_muestra.csv", float_precision="round_trip"
-    ).head(15)
+    )
 
-    registros = muestra[COLUMNAS_ENTRADA].to_dict(orient="records")
+    df_entrada = muestra[COLUMNAS_ENTRADA].astype(object)
+    registros = df_entrada.where(pd.notna(df_entrada), None).to_dict(orient="records")
 
     with TestClient(app) as client:
         respuesta = client.post("/predict", json={"registros": registros})
 
     assert respuesta.status_code == 200
     cuerpo = respuesta.json()
-    assert cuerpo["n_predicciones"] == 15
-    np.testing.assert_allclose(
-        cuerpo["salidas_predichas"],
+    assert cuerpo["n_predicciones"] == len(muestra)
+    assert np.array_equal(
+        np.asarray(cuerpo["salidas_predichas"]),
         esperadas["salidas_predichas"].to_numpy(),
-        rtol=0,
-        atol=1e-9,
     )
 
 
@@ -104,6 +112,28 @@ def test_predict_admite_rezagos_24_y_168_nulos():
     cuerpo = respuesta.json()
     assert cuerpo["n_predicciones"] == 1
     assert cuerpo["salidas_predichas"][0] >= 0.0
+
+
+def test_predict_nan_en_rezago_devuelve_422():
+    """Un NaN literal en los rezagos debe devolver 422 JSON válido y no un 500 por serialización."""
+    registro_con_nan = {
+        **EJEMPLO_REGISTRO_1,
+        "salidas_lag_24": float("nan"),
+    }
+    payload_crudo = json.dumps({"registros": [registro_con_nan]})
+
+    with TestClient(app) as client:
+        respuesta = client.post(
+            "/predict",
+            content=payload_crudo,
+            headers={"Content-Type": "application/json"},
+        )
+
+    assert respuesta.status_code == 422
+    cuerpo = respuesta.json()
+    assert "detail" in cuerpo
+    assert isinstance(cuerpo["detail"], list)
+    assert all("input" not in error for error in cuerpo["detail"])
 
 
 def test_solicitud_a_dataframe_respeta_orden_columnas():
@@ -136,8 +166,19 @@ def test_predict_validacion_422_campos_faltantes_y_tipos_invalidos():
     assert resp_vacio.status_code == 422
 
 
+def test_predict_excede_max_lote_devuelve_422():
+    """POST /predict rechaza con 422 lotes que superan api.max_lote definido en params.yaml."""
+    max_lote = int(cargar_parametros()["api"]["max_lote"])
+    payload_excedido = {"registros": [EJEMPLO_REGISTRO_1] * (max_lote + 1)}
+
+    with TestClient(app) as client:
+        respuesta = client.post("/predict", json=payload_excedido)
+
+    assert respuesta.status_code == 422
+
+
 def test_predict_error_interno_inferencia_500(monkeypatch):
-    """Si ocurre una excepción durante la inferencia, POST /predict responde 500 con detalle claro."""
+    """Si ocurre una excepción durante la inferencia, POST /predict responde 500 con mensaje genérico."""
 
     def fallar_predecir(datos, modelo=None):
         raise RuntimeError("Fallo simulado en el pipeline de inferencia")
@@ -149,8 +190,8 @@ def test_predict_error_interno_inferencia_500(monkeypatch):
 
     assert respuesta.status_code == 500
     detalle = respuesta.json()["detail"]
-    assert "Error al generar predicciones" in detalle
-    assert "Fallo simulado en el pipeline de inferencia" in detalle
+    assert detalle == "Error interno al procesar la solicitud de predicción."
+    assert "Fallo simulado" not in detalle
 
 
 def test_docs_swagger_y_openapi_disponibles():

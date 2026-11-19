@@ -86,6 +86,5 @@ api:
   titulo: "MiBici Demand API"
   descripcion: "Servicio de pronóstico de salidas de bicicletas por estación y hora (horizonte 1 h)."
   version: "1.0.0"
-  host: "0.0.0.0"
-  puerto: 8000
+  max_lote: 5000
 
