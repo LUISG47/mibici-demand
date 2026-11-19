@@ -81,3 +81,23 @@ serving:
   # local: models/<directorio_modelo> (lo que usa Docker)
   # registry: models:/<modelo_registrado>/<version> (necesita mlflow.db; solo fuera de Docker)
   fuente: local
+
+# Simulación y detección de data drift (Issue #39)
+drift:
+  mes_referencia: "2026-09"
+  mae_referencia: 0.801
+  semilla: 42
+
+  simulacion:
+    desplazamiento_medias:
+      factor: 1.25
+    features_faltantes:
+      proporcion: 0.10
+    cambio_estacional:
+      factor: 1.20
+
+  umbrales:
+    psi_advertencia: 0.10
+    psi_critico: 0.25
+    ks_pvalor: 0.05
+    deterioro_mae_relativo: 0.10
