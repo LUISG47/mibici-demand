@@ -88,7 +88,7 @@ drift:
   mes_referencia: "2026-09"
   mae_referencia: 0.801
   semilla: 42
-  experimento_mlflow: "mibici-fase2-drift"
+  experimento_mlflow: "mibici-drift"
   psi_intervalos: 10
   simulacion:
     desplazamiento_medias:
@@ -103,7 +103,7 @@ drift:
   umbrales:
     psi_advertencia: 0.10
     psi_critico: 0.25
-    ks_pvalor: 0.05
+    ks_estadistico: 0.10
     deterioro_mae_relativo: 0.10
 
 api:

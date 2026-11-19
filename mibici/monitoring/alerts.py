@@ -23,10 +23,18 @@ def evaluar_alertas(
 
     psi_advertencia = float(umbrales["psi_advertencia"])
     psi_critico = float(umbrales["psi_critico"])
-    ks_pvalor = float(umbrales["ks_pvalor"])
+    ks_estadistico = float(umbrales["ks_estadistico"])
     deterioro_limite = float(umbrales["deterioro_mae_relativo"])
 
-    if not (0 <= psi_advertencia < psi_critico and 0 < ks_pvalor < 1 and deterioro_limite >= 0):
+    if not (
+        np.isfinite(psi_advertencia)
+        and np.isfinite(psi_critico)
+        and np.isfinite(ks_estadistico)
+        and np.isfinite(deterioro_limite)
+        and 0 <= psi_advertencia < psi_critico
+        and 0 < ks_estadistico <= 1
+        and deterioro_limite >= 0
+    ):
         raise ValueError("Los umbrales de drift no son válidos.")
 
     if deteccion.empty:
@@ -35,7 +43,7 @@ def evaluar_alertas(
     requeridas = {
         "variable",
         "psi",
-        "ks_pvalor",
+        "ks_estadistico",
         "nulos_referencia",
         "nulos_actual",
     }
@@ -47,8 +55,13 @@ def evaluar_alertas(
     if deteccion["variable"].duplicated().any():
         raise ValueError("La tabla contiene variables duplicadas.")
 
-    if deteccion[list(requeridas - {"variable"})].isna().any().any():
+    columnas_numericas = list(requeridas - {"variable"})
+
+    if deteccion[columnas_numericas].isna().any().any():
         raise ValueError("La detección contiene métricas nulas.")
+
+    if not np.isfinite(deteccion[columnas_numericas].to_numpy(dtype=float)).all():
+        raise ValueError("La detección contiene métricas no finitas.")
 
     if not np.isfinite(deterioro_mae_relativo):
         raise ValueError("El deterioro del MAE debe ser finito.")
@@ -59,22 +72,23 @@ def evaluar_alertas(
     tabla["aumento_nulos"] = tabla["nulos_actual"] - tabla["nulos_referencia"]
 
     tabla["alerta_psi"] = tabla["psi"] >= psi_advertencia
-    tabla["alerta_ks"] = tabla["ks_pvalor"] < ks_pvalor
+    tabla["alerta_ks"] = tabla["ks_estadistico"] >= ks_estadistico
     tabla["alerta_nulos"] = tabla["aumento_nulos"] > 0
 
     tabla["drift_detectado"] = tabla["alerta_psi"] | tabla["alerta_ks"] | tabla["alerta_nulos"]
 
+    # Conservar la severidad estadística por variable.
     tabla["nivel"] = "sin_alerta"
     tabla.loc[tabla["drift_detectado"], "nivel"] = "advertencia"
     tabla.loc[tabla["psi"] >= psi_critico, "nivel"] = "critico"
 
     hay_drift = bool(tabla["drift_detectado"].any())
-    hay_drift_critico = bool((tabla["nivel"] == "critico").any())
     hay_deterioro = bool(deterioro_mae_relativo >= deterioro_limite)
 
-    if hay_drift_critico or (hay_drift and hay_deterioro):
+    # La severidad general prioriza el impacto en el desempeño.
+    if hay_deterioro:
         nivel_general = "critico"
-    elif hay_drift or hay_deterioro:
+    elif hay_drift:
         nivel_general = "advertencia"
     else:
         nivel_general = "sin_alerta"
