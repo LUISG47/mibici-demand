@@ -82,6 +82,30 @@ serving:
   # registry: models:/<modelo_registrado>/<version> (necesita mlflow.db; solo fuera de Docker)
   fuente: local
 
+
+# Simulación y detección de data drift (Issue #39)
+drift:
+  mes_referencia: "2026-09"
+  mae_referencia: 0.801
+  semilla: 42
+  experimento_mlflow: "mibici-drift"
+  psi_intervalos: 10
+  simulacion:
+    desplazamiento_medias:
+      factor: 1.25
+    features_faltantes:
+      proporcion: 0.10
+    cambio_estacional:
+      factor: 1.20
+    estres_caracteristicas:
+      factor: 1.50
+
+  umbrales:
+    psi_advertencia: 0.10
+    psi_critico: 0.25
+    ks_estadistico: 0.10
+    deterioro_mae_relativo: 0.10
+
 api:
   titulo: "MiBici Demand API"
   descripcion: "Servicio de pronóstico de salidas de bicicletas por estación y hora (horizonte 1 h)."
