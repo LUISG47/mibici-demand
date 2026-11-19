@@ -1,9 +1,8 @@
-
 """Registro de experimentos de data drift en MLflow."""
 
 import json
-import tempfile
 from pathlib import Path
+import tempfile
 
 import mlflow
 import numpy as np
@@ -11,9 +10,6 @@ import pandas as pd
 
 from mibici.config import cargar_parametros
 from mibici.modeling.tracking import configurar_mlflow
-
-
-EXPERIMENTO_DRIFT = "mibici-fase2-drift"
 
 
 def registrar_drift(
@@ -37,9 +33,10 @@ def registrar_drift(
         raise ValueError(f"Faltan métricas: {sorted(faltantes)}")
 
     configuracion = params["drift"]
+    experimento = configuracion["experimento_mlflow"]
 
     # Reutilizar el tracking existente sin modificar sus funciones.
-    configurar_mlflow(EXPERIMENTO_DRIFT)
+    configurar_mlflow(experimento)
 
     with mlflow.start_run(run_name=f"drift_{escenario}") as run:
         mlflow.log_params(
@@ -69,9 +66,7 @@ def registrar_drift(
                 "tipo_experimento": "simulacion_data_drift",
                 "nivel_alerta": alertas["nivel"],
                 "drift_detectado": str(alertas["drift_detectado"]).lower(),
-                "deterioro_detectado": str(
-                    alertas["deterioro_detectado"]
-                ).lower(),
+                "deterioro_detectado": str(alertas["deterioro_detectado"]).lower(),
             }
         )
 

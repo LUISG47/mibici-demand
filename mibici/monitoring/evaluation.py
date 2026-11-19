@@ -1,4 +1,3 @@
-
 """Evaluación del impacto de data drift sobre el desempeño del modelo."""
 
 import numpy as np
@@ -7,7 +6,6 @@ import pandas as pd
 from mibici.modeling.predict import predecir
 from mibici.modeling.validation import METRICAS
 from mibici.monitoring.drift import ESCENARIOS, simular_drift
-
 
 COLUMNA_OBJETIVO = "salidas_siguiente_hora"
 
@@ -33,10 +31,7 @@ def calcular_metricas(
     if not np.isfinite(predicciones).all():
         raise ValueError("El modelo generó predicciones no finitas.")
 
-    return {
-        nombre: funcion(reales, predicciones)
-        for nombre, funcion in METRICAS.items()
-    }
+    return {nombre: funcion(reales, predicciones) for nombre, funcion in METRICAS.items()}
 
 
 def evaluar_escenarios(

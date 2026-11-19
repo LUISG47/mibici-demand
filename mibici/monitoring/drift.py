@@ -1,11 +1,9 @@
-
 """Simulación reproducible de data drift para MiBici."""
 
 import numpy as np
 import pandas as pd
 
 from mibici.config import cargar_parametros
-
 
 COLUMNAS_HISTORICAS = (
     "salidas_lag_1",
@@ -20,6 +18,7 @@ ESCENARIOS = (
     "desplazamiento_medias",
     "features_faltantes",
     "cambio_estacional",
+    "estres_caracteristicas",
 )
 
 
@@ -52,7 +51,7 @@ def simular_drift(
     resultado = datos.copy(deep=True)
     columnas = list(COLUMNAS_HISTORICAS)
 
-    if escenario == "desplazamiento_medias":
+    if escenario in ("desplazamiento_medias", "estres_caracteristicas"):
         factor = float(simulacion["factor"])
 
         if factor <= 0 or not np.isfinite(factor):
@@ -77,12 +76,10 @@ def simular_drift(
         if factor <= 0 or not np.isfinite(factor):
             raise ValueError("El factor debe ser positivo y finito.")
 
-        dias_especiales = (
-            resultado["fin_semana"].eq(1) | resultado["festivo"].eq(1)
-        )
+        dias_especiales = resultado["fin_semana"].eq(1) | resultado["festivo"].eq(1)
 
-        resultado.loc[dias_especiales, columnas] = (
-            resultado.loc[dias_especiales, columnas].mul(factor)
+        resultado.loc[dias_especiales, columnas] = resultado.loc[dias_especiales, columnas].mul(
+            factor
         )
 
     return resultado

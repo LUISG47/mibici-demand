@@ -1,10 +1,10 @@
-
 """Ejecución integrada del monitoreo de data drift para MiBici."""
 
 from pathlib import Path
 
-import pandas as pd
 from loguru import logger
+import mlflow
+import pandas as pd
 
 from mibici.config import (
     FIGURES_DIR,
@@ -44,16 +44,12 @@ def ejecutar_monitoreo(
     mes = params["drift"]["mes_referencia"]
     fechas = pd.to_datetime(datos["fecha_hora"])
 
-    referencia = datos.loc[
-        fechas.dt.to_period("M") == mes
-    ].copy()
+    referencia = datos.loc[fechas.dt.to_period("M") == mes].copy()
 
     if referencia.empty:
         raise ValueError(f"No existen registros para {mes}.")
 
-    logger.info(
-        f"Evaluando {len(referencia):,} observaciones de {mes}."
-    )
+    logger.info(f"Evaluando {len(referencia):,} observaciones de {mes}.")
 
     modelo = cargar_modelo_servicio(params=params)
     desempeno = evaluar_escenarios(referencia, modelo, params=params)
@@ -75,21 +71,18 @@ def ejecutar_monitoreo(
             referencia,
             alterados,
             list(COLUMNAS_HISTORICAS),
+            n_intervalos=int(params["drift"]["psi_intervalos"]),
         )
 
         deteccion.insert(0, "escenario", escenario)
 
-        fila = desempeno.loc[
-            desempeno["escenario"] == escenario
-        ].iloc[0]
+        fila = desempeno.loc[desempeno["escenario"] == escenario].iloc[0]
 
         metricas = {
             "mae": float(fila["mae"]),
             "rmse": float(fila["rmse"]),
             "wape": float(fila["wape"]),
-            "deterioro_mae_relativo": float(
-                fila["deterioro_mae_relativo"]
-            ),
+            "deterioro_mae_relativo": float(fila["deterioro_mae_relativo"]),
         }
 
         alertas = evaluar_alertas(
@@ -114,12 +107,8 @@ def ejecutar_monitoreo(
                 "escenario": escenario,
                 "nivel": alertas["nivel"],
                 "drift_detectado": alertas["drift_detectado"],
-                "deterioro_detectado": alertas[
-                    "deterioro_detectado"
-                ],
-                "variables_afectadas": len(
-                    alertas["variables_afectadas"]
-                ),
+                "deterioro_detectado": alertas["deterioro_detectado"],
+                "variables_afectadas": len(alertas["variables_afectadas"]),
                 "acciones": " | ".join(alertas["acciones"]),
             }
         )
@@ -135,6 +124,17 @@ def ejecutar_monitoreo(
         directorio=figuras_dir,
         params=params,
     )
+
+    # Asociar las gráficas generadas a los runs existentes de MLflow.
+    for escenario, run_id in run_ids.items():
+        with mlflow.start_run(run_id=run_id):
+            for ruta in figuras.values():
+                mlflow.log_artifact(
+                    str(ruta),
+                    artifact_path="drift/figuras",
+                )
+
+        logger.info(f"Gráficas registradas en MLflow para {escenario}: {run_id}")
 
     return {
         "desempeno": desempeno,

@@ -4,6 +4,7 @@
 import numpy as np
 import pandas as pd
 import pytest
+from unittest.mock import patch
 
 from mibici.monitoring.alerts import evaluar_alertas
 from mibici.monitoring.detectors import (
@@ -21,6 +22,7 @@ from mibici.monitoring.evaluation import (
     evaluar_escenarios,
 )
 from mibici.monitoring.plots import generar_graficas
+from mibici.monitoring.tracking import registrar_drift
 
 
 @pytest.fixture
@@ -45,6 +47,7 @@ def datos():
     return datos
 
 
+
 @pytest.fixture
 def params_drift():
     return {
@@ -54,6 +57,7 @@ def params_drift():
                 "desplazamiento_medias": {"factor": 1.25},
                 "features_faltantes": {"proporcion": 0.10},
                 "cambio_estacional": {"factor": 1.20},
+                "estres_caracteristicas": {"factor": 1.50},
             },
             "umbrales": {
                 "psi_advertencia": 0.10,
@@ -112,6 +116,28 @@ def test_when_shiftingMeans_then_historicalFeaturesAreScaled(
     pd.testing.assert_frame_equal(
         alterados[list(COLUMNAS_HISTORICAS)],
         esperado,
+    )
+
+
+def test_whenStressingFeatures_then_historicalFeaturesAreScaled(
+    datos, params_drift
+):
+    alterados = simular_drift(
+        datos,
+        "estres_caracteristicas",
+        params=params_drift,
+    )
+
+    esperado = datos[list(COLUMNAS_HISTORICAS)] * 1.50
+
+    pd.testing.assert_frame_equal(
+        alterados[list(COLUMNAS_HISTORICAS)],
+        esperado,
+    )
+
+    pd.testing.assert_series_equal(
+        alterados["salidas_siguiente_hora"],
+        datos["salidas_siguiente_hora"],
     )
 
 
@@ -217,12 +243,87 @@ def test_whenDistributionShifts_then_psiAndKsDetectDifference():
     assert pvalor < 0.05
 
 
+def test_whenPsiIntervalsChange_then_detectionUsesConfiguredIntervals():
+    referencia = pd.DataFrame({
+        "demanda": np.arange(1, 101, dtype=float),
+    })
+    actual = pd.DataFrame({
+        "demanda": np.arange(31, 131, dtype=float),
+    })
+
+    resultado_dos = detectar_drift(
+        referencia,
+        actual,
+        ["demanda"],
+        n_intervalos=2,
+    )
+
+    resultado_diez = detectar_drift(
+        referencia,
+        actual,
+        ["demanda"],
+        n_intervalos=10,
+    )
+
+    psi_dos = resultado_dos.iloc[0]["psi"]
+    psi_diez = resultado_diez.iloc[0]["psi"]
+
+    assert psi_dos == pytest.approx(
+        calcular_psi(referencia["demanda"], actual["demanda"], n_intervalos=2)
+    )
+    assert psi_diez == pytest.approx(
+        calcular_psi(referencia["demanda"], actual["demanda"], n_intervalos=10)
+    )
+    assert psi_dos != pytest.approx(psi_diez)
+
+
 def test_whenMissingValuesIncrease_then_psiDetectsChange():
     referencia = pd.Series(np.arange(100, dtype=float))
     alterados = referencia.copy()
     alterados.iloc[:20] = np.nan
 
     assert calcular_psi(referencia, alterados) > 0
+
+
+@pytest.mark.parametrize(
+    ("ceros_actuales", "positivos_actuales"),
+    [
+        (800, 200),
+        (300, 700),
+    ],
+)
+def test_whenZeroProportionChanges_then_psiDetectsDrift(
+    ceros_actuales, positivos_actuales
+):
+    referencia = pd.Series(
+        np.concatenate([np.zeros(600), np.arange(1, 401)])
+    )
+    actual = pd.Series(
+        np.concatenate([
+            np.zeros(ceros_actuales),
+            np.arange(1, positivos_actuales + 1),
+        ])
+    )
+
+    assert calcular_psi(referencia, actual) > 0
+
+
+def test_whenZeroHeavyDistributionsAreIdentical_then_psiIsZero():
+    referencia = pd.Series(
+        np.concatenate([np.zeros(600), np.arange(1, 401)])
+    )
+
+    assert calcular_psi(referencia, referencia.copy()) == pytest.approx(0)
+
+
+def test_whenReferenceContainsOnlyZeros_then_psiDetectsNewValues():
+    referencia = pd.Series(np.zeros(1000))
+    actual = pd.Series(
+        np.concatenate([np.zeros(800), np.ones(200)])
+    )
+
+    assert calcular_psi(referencia, actual) > 0
+
 
 
 def test_whenReferenceIsEmpty_then_psiRaisesValueError():
@@ -252,19 +353,30 @@ def test_whenDetectingDrift_then_returnsMetricsForEachVariable():
     ].iloc[0] > 0
 
 
-def test_whenEvaluatingScenarios_then_returnsFourResults(
+
+def test_whenEvaluatingScenarios_then_returnsAllResults(
     datos, params_drift
 ):
     resultado = evaluar_escenarios(
         datos, ModeloPrueba(), params=params_drift
     )
 
-    assert len(resultado) == 4
+    assert len(resultado) == len(ESCENARIOS) + 1
     assert set(resultado["escenario"]) == {
-        "referencia", *ESCENARIOS
+        "referencia",
+        *ESCENARIOS,
     }
+
     assert (resultado["n_registros"] == len(datos)).all()
-    assert resultado.iloc[0]["deterioro_mae_relativo"] == 0
+    assert resultado["mae"].notna().all()
+    assert resultado["rmse"].notna().all()
+    assert resultado["wape"].notna().all()
+
+    referencia = resultado.loc[
+        resultado["escenario"] == "referencia"
+    ].iloc[0]
+
+    assert referencia["deterioro_mae_relativo"] == pytest.approx(0)
 
 
 def test_whenTargetIsMissing_then_evaluationRaisesValueError(datos):
@@ -360,3 +472,54 @@ def test_whenGeneratingPlots_then_threePngFilesAreCreated(
     assert set(rutas) == {"psi", "ks_estadistico", "mae"}
     assert all(ruta.is_file() for ruta in rutas.values())
     assert all(ruta.stat().st_size > 0 for ruta in rutas.values())
+
+
+def test_whenExperimentIsConfigured_then_trackingUsesConfiguredName(
+    params_drift,
+):
+    params_drift["drift"]["experimento_mlflow"] = "experimento-prueba"
+    params_drift["drift"]["mes_referencia"] = "2026-09"
+    params_drift["drift"]["mae_referencia"] = 0.801
+
+    deteccion = pd.DataFrame({
+        "variable": ["salidas_lag_1"],
+        "psi": [0.15],
+        "ks_pvalor": [0.01],
+        "nulos_referencia": [0.0],
+        "nulos_actual": [0.0],
+    })
+
+    metricas = {
+        "mae": 0.9,
+        "rmse": 1.5,
+        "wape": 0.6,
+        "deterioro_mae_relativo": 0.12,
+    }
+
+    alertas = {
+        "nivel": "critico",
+        "drift_detectado": True,
+        "deterioro_detectado": True,
+        "variables_afectadas": ["salidas_lag_1"],
+        "acciones": ["Evaluar reentrenamiento."],
+    }
+
+    with (
+        patch("mibici.monitoring.tracking.configurar_mlflow") as configurar,
+        patch("mibici.monitoring.tracking.mlflow") as mlflow_mock,
+    ):
+        mlflow_mock.start_run.return_value.__enter__.return_value.info.run_id = (
+            "run-prueba"
+        )
+
+        resultado = registrar_drift(
+            escenario="estres_caracteristicas",
+            deteccion=deteccion,
+            metricas=metricas,
+            alertas=alertas,
+            params=params_drift,
+        )
+
+    configurar.assert_called_once_with("experimento-prueba")
+    assert resultado == "run-prueba"
+

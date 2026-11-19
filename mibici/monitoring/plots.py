@@ -1,4 +1,3 @@
-
 """Visualizaciones de diagnóstico para simulaciones de data drift."""
 
 from pathlib import Path
@@ -33,14 +32,10 @@ def validar_tablas(
     faltantes_desempeno = columnas_desempeno - set(desempeno.columns)
 
     if faltantes_deteccion:
-        raise ValueError(
-            f"Faltan columnas de detección: {sorted(faltantes_deteccion)}"
-        )
+        raise ValueError(f"Faltan columnas de detección: {sorted(faltantes_deteccion)}")
 
     if faltantes_desempeno:
-        raise ValueError(
-            f"Faltan columnas de desempeño: {sorted(faltantes_desempeno)}"
-        )
+        raise ValueError(f"Faltan columnas de desempeño: {sorted(faltantes_desempeno)}")
 
     if deteccion.empty or desempeno.empty:
         raise ValueError("Las tablas no pueden estar vacías.")

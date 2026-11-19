@@ -1,4 +1,3 @@
-
 """Detección de data drift mediante PSI y Kolmogórov-Smirnov."""
 
 import numpy as np
@@ -11,7 +10,7 @@ def calcular_psi(
     actual: pd.Series,
     n_intervalos: int = 10,
 ) -> float:
-    """Calcula PSI usando intervalos derivados exclusivamente de la referencia."""
+    """Calcula PSI separando ceros, valores no nulos y faltantes."""
     if n_intervalos < 2:
         raise ValueError("n_intervalos debe ser al menos 2.")
 
@@ -26,38 +25,58 @@ def calcular_psi(
 
     if not np.isfinite(valores_referencia).all():
         raise ValueError("La referencia contiene valores no finitos.")
+
     if not np.isfinite(valores_actuales).all():
         raise ValueError("La muestra actual contiene valores no finitos.")
 
     if len(valores_referencia) == 0:
         raise ValueError("La referencia no contiene valores válidos.")
 
-    # Intervalos calculados únicamente con la distribución de referencia.
-    limites = np.unique(
-        np.quantile(valores_referencia, np.linspace(0, 1, n_intervalos + 1))
-    )
+    # Los ceros se contabilizan en una categoría independiente.
+    ceros_referencia = np.count_nonzero(valores_referencia == 0)
+    ceros_actuales = np.count_nonzero(valores_actuales == 0)
 
-    # Incluir valores fuera del rango de referencia.
-    if len(limites) == 1:
-        bordes = np.array([-np.inf, limites[0], np.inf])
+    no_ceros_referencia = valores_referencia[valores_referencia != 0]
+    no_ceros_actuales = valores_actuales[valores_actuales != 0]
+
+    # Los intervalos se construyen exclusivamente con los valores
+    # distintos de cero de la distribución de referencia.
+    if len(no_ceros_referencia) == 0:
+        bordes = np.array([-np.inf, np.inf])
     else:
+        cuantiles = np.quantile(
+            no_ceros_referencia,
+            np.linspace(0, 1, n_intervalos + 1),
+        )
+        limites = np.unique(cuantiles)
         bordes = np.concatenate(([-np.inf], limites[1:-1], [np.inf]))
 
-    conteos_referencia = np.histogram(valores_referencia, bins=bordes)[0]
-    conteos_actuales = np.histogram(valores_actuales, bins=bordes)[0]
+    conteos_referencia = np.histogram(no_ceros_referencia, bins=bordes)[0]
+    conteos_actuales = np.histogram(no_ceros_actuales, bins=bordes)[0]
 
-    # Los valores faltantes forman una categoría adicional.
-    conteos_referencia = np.append(conteos_referencia, referencia.isna().sum())
-    conteos_actuales = np.append(conteos_actuales, actual.isna().sum())
+    # Categorías adicionales: ceros y valores faltantes.
+    conteos_referencia = np.concatenate(
+        (
+            conteos_referencia,
+            [ceros_referencia, referencia.isna().sum()],
+        )
+    )
+    conteos_actuales = np.concatenate(
+        (
+            conteos_actuales,
+            [ceros_actuales, actual.isna().sum()],
+        )
+    )
 
-    # Suavizado para evitar log(0).
     epsilon = 1e-6
-    proporcion_referencia = (
-        conteos_referencia + epsilon
-    ) / (len(referencia) + epsilon * len(conteos_referencia))
-    proporcion_actual = (
-        conteos_actuales + epsilon
-    ) / (len(actual) + epsilon * len(conteos_actuales))
+
+    proporcion_referencia = (conteos_referencia + epsilon) / (
+        len(referencia) + epsilon * len(conteos_referencia)
+    )
+
+    proporcion_actual = (conteos_actuales + epsilon) / (
+        len(actual) + epsilon * len(conteos_actuales)
+    )
 
     psi = np.sum(
         (proporcion_actual - proporcion_referencia)
@@ -100,6 +119,7 @@ def detectar_drift(
     referencia: pd.DataFrame,
     actual: pd.DataFrame,
     columnas: tuple[str, ...] | list[str],
+    n_intervalos: int = 10,
 ) -> pd.DataFrame:
     """Calcula PSI, KS y proporciones de nulos para cada característica."""
     filas = []
@@ -116,7 +136,11 @@ def detectar_drift(
         filas.append(
             {
                 "variable": columna,
-                "psi": calcular_psi(referencia[columna], actual[columna]),
+                "psi": calcular_psi(
+                    referencia[columna],
+                    actual[columna],
+                    n_intervalos=n_intervalos,
+                ),
                 "ks_estadistico": estadistico_ks,
                 "ks_pvalor": pvalor_ks,
                 "nulos_referencia": float(referencia[columna].isna().mean()),
