@@ -13,7 +13,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/licencia-MIT-yellow" alt="Licencia MIT"></a>
   <img src="https://img.shields.io/badge/Fase%201-completada-brightgreen" alt="Fase 1 · completada">
   <img src="https://img.shields.io/badge/Fase%202-completada-brightgreen" alt="Fase 2 · completada">
-  <img src="https://img.shields.io/badge/Entrega%20final-en%20curso-orange" alt="Entrega final · en curso">
+  <img src="https://img.shields.io/badge/Entrega%20final-completada-brightgreen" alt="Entrega final · completada">
+  <a href="https://hub.docker.com/r/luisg47/mibici-demand"><img src="https://img.shields.io/badge/DockerHub-luisg47%2Fmibici--demand-2496ED?logo=docker&logoColor=white" alt="DockerHub luisg47/mibici-demand"></a>
 </p>
 
 <p align="center"><b>Tecnológico de Monterrey</b> · MLOps (TC5061) · Equipo 1</p>
@@ -28,6 +29,7 @@ anticipar qué estaciones van a quedar vacías o llenas para rebalancear bicicle
 - [Pipeline](#pipeline)
 - [Estado del proyecto](#estado-del-proyecto)
   - [Entrega final](#entrega-final-)
+- [Reproducir en otro entorno](#reproducir-en-otro-entorno)
 - [Configuración y validación](#configuración-y-validación)
 - [Fase 2: modelado de principio a fin](#fase-2-modelado-de-principio-a-fin)
 - [Instalación](#instalación)
@@ -36,7 +38,11 @@ anticipar qué estaciones van a quedar vacías o llenas para rebalancear bicicle
   - [Reglas, en el orden en que se aplican](#reglas-en-el-orden-en-que-se-aplican)
 - [Pruebas](#pruebas)
 - [Modelo desplegable](#modelo-desplegable)
+- [API de predicción](#api-de-predicción)
 - [Docker](#docker)
+- [Monitoreo de data drift](#monitoreo-de-data-drift)
+  - [Resultados con septiembre de 2026](#resultados-con-septiembre-de-2026)
+  - [Limitaciones](#limitaciones)
 - [Project Organization](#project-organization)
 
 ## Equipo
@@ -59,20 +65,20 @@ flowchart LR
     E -->|"walk-forward<br/>mibici/modeling/compare_models.py"| F["Modelos<br/>líneas base · Ridge · HGB Poisson"]
     F -->|"champion"| G{{"Model Registry<br/>mibici-demanda-salidas@champion"}}
     G -->|"export<br/>mibici/modeling/export_model.py"| H[("models/<br/>mibici-demanda-salidas-v1")]
-    H -->|"cargar_modelo_servicio()"| I["API FastAPI<br/>mibici.api.main (#37)"]
-    I -->|"Dockerfile"| J["Docker<br/>ml-service · DockerHub (#40)"]
+    H -->|"cargar_modelo_servicio()"| I["API FastAPI<br/>mibici.api.main"]
+    I -->|"Dockerfile"| J["Docker<br/>DockerHub luisg47/mibici-demand"]
+    H -->|"simulación y detección<br/>mibici/monitoring/run_drift.py"| K["Monitoreo de data drift<br/>PSI · KS · MAE"]
+    E -->|"septiembre 2026"| K
     B -.->|"mibici_raw_v1"| M{{"MLflow · experimento mibici-fase1"}}
     C -.->|"mibici_interim_v1"| M
     D -.->|"mibici_processed_v2"| M
     E -.->|"mibici_processed_v3"| M
     F -.->|"runs por modelo y ventana"| N{{"MLflow · experimento mibici-fase2-modelado"}}
-    classDef pendiente stroke-dasharray: 5 5
-    class I,J pendiente
+    K -.->|"un run por escenario"| P{{"MLflow · experimento mibici-drift"}}
 ```
 
 Cada versión del dataset queda registrada en MLflow con su esquema, número de filas, *digest*
 y los tags `git_commit` y `fuente_datos`, que la ligan al código y a la fuente que la generaron.
-Los nodos con borde punteado (API y publicación en DockerHub) están en desarrollo.
 
 Para generar los datasets procesados:
 
@@ -92,16 +98,16 @@ python -m mibici.features v3
 |---|---|---|
 | Fase 1: datos, EDA y preprocesamiento | ✅ Completada | 25 de octubre de 2026 |
 | Fase 2: modelado | ✅ Completada | 6 de noviembre de 2026 |
-| Entrega final: pruebas, API, Docker y monitoreo | 🚧 En curso | 22 de noviembre de 2026 |
+| Entrega final: pruebas, API, Docker y monitoreo | ✅ Completada | 22 de noviembre de 2026 |
 
-### Entrega final 🚧
+### Entrega final ✅
 
 - [x] Modelo exportado a `models/` y `Dockerfile` (#40, PR #43)
-- [ ] Pruebas de integración de extremo a extremo (#38)
-- [ ] API con FastAPI: `POST /predict` y `GET /health` (#37)
-- [ ] Publicación de la imagen en DockerHub (#40)
-- [ ] Simulación de data drift y detección de pérdida de performance (#39)
-- [ ] README final y CI con GitHub Actions (#41)
+- [x] Pruebas de integración de extremo a extremo (#38, PR #45)
+- [x] API con FastAPI: `POST /predict` y `GET /health` (#37, PR #46)
+- [x] Publicación de la imagen en [DockerHub](https://hub.docker.com/r/luisg47/mibici-demand) (#40)
+- [x] Simulación de data drift y detección de pérdida de performance (#39, PR #48)
+- [x] README final y CI con GitHub Actions (#41)
 
 <details>
 <summary><b>Fase 2 ✅</b></summary>
@@ -129,6 +135,43 @@ python -m mibici.features v3
 </details>
 
 Para colaborar, revisa [CONTRIBUTING.md](CONTRIBUTING.md).
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
+## Reproducir en otro entorno
+
+Pasos mínimos para verificar el proyecto en una máquina nueva. **Ni las pruebas ni la API
+necesitan `data/` ni `mlflow.db`**: las pruebas usan datos sintéticos, fixtures en
+`tests/fixtures/` y un MLflow temporal, y la API carga el modelo versionado en
+`models/mibici-demanda-salidas-v1/`.
+
+```bash
+# 1. Clonar
+git clone https://github.com/LUISG47/mibici-demand.git
+cd mibici-demand
+
+# 2. Entorno virtual con Python 3.12.2 (la versión del CI y de la imagen Docker)
+python3.12 -m venv .venv
+source .venv/bin/activate
+python --version   # Python 3.12.2
+
+# 3. Dependencias
+pip install -r requirements.txt
+
+# 4. Pruebas (182 pruebas, ~1.5 min)
+pytest -q
+```
+
+Alternativa sin Python local: la imagen publicada en DockerHub levanta la API directamente.
+
+```bash
+docker pull luisg47/mibici-demand:v1.0.0
+docker run -p 8000:8000 luisg47/mibici-demand:v1.0.0
+curl http://localhost:8000/health   # {"estado":"ok","modelo_cargado":true,"detalle":null}
+```
+
+Solo para regenerar los datasets, reentrenar o correr el monitoreo de drift con datos reales
+hace falta descargar los datos ([Descarga de datos](#descarga-de-datos)).
 
 <p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
@@ -294,7 +337,7 @@ pequeños en `tests/fixtures/` y un MLflow temporal en cada prueba, así que tam
 corren en un clon limpio y en el CI.
 
 ```bash
-pytest -q        # todas las pruebas (~30 s)
+pytest -q        # las 182 pruebas (~1.5 min en un clon limpio)
 make lint        # ruff: formato e imports
 make test        # equivalente a python -m pytest tests
 ```
@@ -305,7 +348,9 @@ make test        # equivalente a python -m pytest tests
 | Modelado | `test_modeling_pipeline.py`, `test_baselines.py`, `test_validation.py`, `test_tuning.py`, `test_checkpoints.py` | Pipeline de scikit-learn, líneas base, walk-forward y métricas, ajuste de hiperparámetros y checkpoints |
 | Evaluación | `test_compare_models.py`, `test_error_analysis.py`, `test_error_plots.py` | Comparación de modelos y elección del champion, análisis y figuras de errores |
 | MLflow | `test_tracking.py`, `test_predict.py` | Runs padre y anidados, Model Registry con alias, inferencia y CLI de `predict` |
-| Serving | `test_export_model.py` | Exportación a `models/` con `metadata.json` y reproducibilidad del modelo v1 (tolerancia 1e-9) |
+| Serving | `test_export_model.py`, `test_api.py` | Exportación a `models/` con `metadata.json`, reproducibilidad del modelo v1 (tolerancia 1e-9) y endpoints `/health` y `/predict` (12 pruebas) |
+| Integración | `integration/test_e2e.py` | Flujo de extremo a extremo con MLflow temporal: datos, features v3, entrenamiento, predicción, métricas, registro y reproducibilidad del modelo guardado |
+| Monitoreo | `test_drift.py` | Simulación de escenarios, PSI y KS, métricas, alertas, gráficas y tracking del drift (39 pruebas) |
 
 El workflow [`.github/workflows/ci.yml`](.github/workflows/ci.yml) corre `make lint` y
 `pytest -q` con Python 3.12.2 en cada Pull Request y en cada push a `main`.
@@ -341,6 +386,46 @@ Docker) o `registry` (`models:/<nombre>/<versión>`).
 
 <p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
+## API de predicción
+
+Servicio FastAPI en [`mibici/api/`](mibici/api/) (`main.py` y `schemas.py`). Carga el
+modelo una sola vez al iniciar con `cargar_modelo_servicio()` (por defecto la carpeta de
+`models/`, así que no necesita `mlflow.db`). Título, versión y tamaño máximo del lote
+salen de la sección `api:` de `params.yaml`.
+
+```bash
+uvicorn mibici.api.main:app --port 8000   # documentación interactiva en http://localhost:8000/docs
+```
+
+| Endpoint | Qué hace | Respuestas |
+|---|---|---|
+| `GET /health` | Estado del servicio y del modelo; lo usa el `HEALTHCHECK` de Docker | `200` modelo listo · `503` el modelo no cargó |
+| `POST /predict` | Salidas de cada estación en la siguiente hora para un lote de registros | `200` predicciones · `422` entrada inválida · `500` error de inferencia · `503` sin modelo |
+
+Cada registro lleva las 20 columnas de la firma del modelo (`estacion_id`, `fecha_hora`,
+calendario, rezagos de 1, 24 y 168 h, codificación cíclica y `fecha_objetivo`). Los rezagos
+de 24 y 168 h admiten `null` y el pipeline los imputa. Se rechazan columnas extra y lotes de
+más de `api.max_lote` (5,000) registros.
+
+```bash
+curl -X POST http://localhost:8000/predict -H "Content-Type: application/json" -d '{
+  "registros": [{
+    "estacion_id": 173, "fecha_hora": "2026-09-01T05:00:00",
+    "hora": 6, "dia_semana": 1, "mes": 9, "fin_semana": 0,
+    "salidas_lag_1": 0, "llegadas_lag_1": 0,
+    "salidas_lag_24": 3, "llegadas_lag_24": 2,
+    "salidas_lag_168": 4, "llegadas_lag_168": 1, "festivo": 0,
+    "hora_sin": 1.0, "hora_cos": 0.0,
+    "dia_semana_sin": 0.7818, "dia_semana_cos": 0.6235,
+    "mes_sin": -0.8660, "mes_cos": -0.5,
+    "fecha_objetivo": "2026-09-01T06:00:00"
+  }]
+}'
+# {"salidas_predichas":[3.2368...],"n_predicciones":1}
+```
+
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
 ## Docker
 
 La imagen se construye con [`Dockerfile`](Dockerfile) sobre `python:3.12.2-slim`, instala
@@ -348,14 +433,90 @@ solo [`requirements-serving.txt`](requirements-serving.txt), corre con un usuari
 privilegios y copia el modelo de `models/` (nunca `data/`, `mlruns/` ni `mlflow.db`; ver
 [`.dockerignore`](.dockerignore)).
 
+El contenedor arranca la [API](#api-de-predicción) (`uvicorn mibici.api.main:app` en el
+puerto 8000) y Docker revisa `GET /health` cada 30 s.
+
+La imagen está publicada en DockerHub:
+**[luisg47/mibici-demand](https://hub.docker.com/r/luisg47/mibici-demand)** (tags `v1.0.0`
+y `latest`).
+
 ```bash
+# Imagen publicada
+docker pull luisg47/mibici-demand:v1.0.0
+docker run -p 8000:8000 luisg47/mibici-demand:v1.0.0
+
+# O construirla localmente
 docker build -t ml-service:latest .
 docker run -p 8000:8000 ml-service:latest
 ```
 
-> El contenedor arranca la API (`uvicorn mibici.api.main:app` en el puerto 8000) cuando se
-> integre el servicio del #37; mientras tanto la imagen ya construye y reproduce las
-> predicciones de `predict.py`. La liga de DockerHub se agregará al publicar la imagen (#40).
+<p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
+
+## Monitoreo de data drift
+
+El módulo [`mibici/monitoring/`](mibici/monitoring/) altera de forma sintética las variables
+históricas de septiembre de 2026, detecta el drift por variable y mide su efecto en el
+modelo exportado. Necesita `data/processed/estacion_hora_v3.parquet` y registra cada
+escenario en el experimento **`mibici-drift`** de MLflow.
+
+```bash
+python -m mibici.monitoring.run_drift
+```
+
+| Escenario | Qué simula |
+|---|---|
+| `desplazamiento_medias` | Rezagos de salidas y llegadas ×1.25 |
+| `features_faltantes` | 10 % de valores faltantes en los rezagos |
+| `cambio_estacional` | Rezagos ×1.20 solo en fines de semana y festivos |
+| `estres_caracteristicas` | Rezagos ×1.50 |
+
+- **Detección por variable:** PSI, estadístico D de Kolmogórov-Smirnov y aumento de nulos.
+- **Desempeño:** MAE, RMSE, WAPE y deterioro relativo del MAE frente a la referencia.
+- **Umbrales** (sección `drift.umbrales` de `params.yaml`): `psi_advertencia` 0.10,
+  `psi_critico` 0.25, `ks_estadistico` 0.10 y `deterioro_mae_relativo` 0.10.
+- **Nivel general:** **crítico** si el MAE se deteriora 10 % o más; **advertencia** si hay
+  drift en alguna variable sin deterioro crítico; **sin alerta** en otro caso. El PSI
+  crítico por variable queda en el detalle, pero no eleva por sí solo el nivel general.
+- **Acciones:** con drift, revisar el pipeline de características y la calidad de datos; con
+  deterioro, investigar la pérdida de desempeño y evaluar el reentrenamiento.
+- **Registro en MLflow:** un run por escenario con métricas, umbrales, el tag
+  `nivel_alerta`, `alertas.json`, `deteccion_variables.csv` y las tres gráficas.
+- **Pruebas:** 39 pruebas en [`tests/test_drift.py`](tests/test_drift.py), con datos
+  sintéticos.
+
+### Resultados con septiembre de 2026
+
+336,181 registros estación-hora, modelo `models/mibici-demanda-salidas-v1`:
+
+| Escenario | MAE | RMSE | WAPE | Deterioro MAE | PSI máx | KS D máx | Nivel |
+|---|---:|---:|---:|---:|---:|---:|---|
+| referencia | 0.8020 | 1.3903 | 0.5719 | 0.00 % | — | — | referencia |
+| cambio_estacional | 0.8092 | 1.4061 | 0.5770 | 0.89 % | 0.002 | 0.055 | sin alerta |
+| features_faltantes | 0.8207 | 1.5112 | 0.5851 | 2.32 % | 2.444 | 0.0005 | advertencia |
+| desplazamiento_medias | 0.8390 | 1.4794 | 0.5982 | 4.61 % | 0.022 | 0.179 | advertencia |
+| estres_caracteristicas | 0.9147 | 1.6936 | 0.6522 | 14.05 % | 2.460 | 0.179 | crítico |
+
+Solo `estres_caracteristicas` rebasa el 10 % de deterioro y dispara "evaluar el
+reentrenamiento".
+
+| PSI por variable | KS D por variable | MAE por escenario |
+|---|---|---|
+| ![PSI por variable](reports/figures/drift_psi_por_variable.png) | ![KS por variable](reports/figures/drift_ks_por_variable.png) | ![MAE por escenario](reports/figures/drift_mae_por_escenario.png) |
+
+### Limitaciones
+
+- **El PSI no ve bien los cambios de escala en conteos con muchos ceros.** El 53.7 % de los
+  valores son 0, así que los bordes de los intervalos de la referencia quedan en
+  [0, 1, 2, 4, 137]. Con ×1.25 cada valor cae en su mismo intervalo (1 → 1.25, 3 → 3.75) y
+  el PSI casi no cambia: 0.022 en `desplazamiento_medias` y 0.002 en `cambio_estacional`.
+  Por eso el umbral del KS usa el estadístico D y no el p-value. Con 336k filas el p-value
+  sale 0 o 1 y no distingue escenarios, mientras que D sí los ordena.
+- **No es una evaluación fuera de muestra.** El modelo exportado se entrenó con datos que
+  incluyen septiembre de 2026, así que los resultados miden la sensibilidad del modelo al
+  drift, no su desempeño en datos nuevos.
+- **El drift es sintético.** Los escenarios alteran las variables de entrada, pero no el
+  objetivo (`salidas_siguiente_hora`). Un cambio real de demanda tendría que monitorearse
+  con datos nuevos cada mes.
 
 <p align="right"><sub><a href="#índice">↑ Volver al índice</a></sub></p>
 
@@ -370,7 +531,7 @@ docker run -p 8000:8000 ml-service:latest
 ├── LICENSE                    <- Licencia MIT
 ├── Makefile                   <- Comandos: make requirements, data, lint, format, test
 ├── README.md                  <- Este documento
-├── params.yaml                <- Parámetros: datos, limpieza, features, validación, modelado, MLflow y serving
+├── params.yaml                <- Parámetros: datos, limpieza, features, validación, modelado, MLflow, serving, drift y API
 ├── pyproject.toml             <- Metadatos del paquete mibici y configuración de ruff y pytest
 ├── requirements.txt           <- Dependencias fijas del entorno de desarrollo
 ├── requirements-serving.txt   <- Dependencias mínimas para servir el modelo (imagen Docker)
@@ -387,6 +548,19 @@ docker run -p 8000:8000 ml-service:latest
 │   ├── eda.py                 <- Análisis exploratorio
 │   ├── features.py            <- Agregación estación-hora y datasets v2 y v3
 │   ├── plots.py               <- Gráficas del EDA
+│   ├── api
+│   │   ├── __init__.py
+│   │   ├── main.py            <- App FastAPI: GET /health y POST /predict
+│   │   └── schemas.py         <- Esquemas Pydantic de entrada (20 columnas) y salida
+│   ├── monitoring
+│   │   ├── __init__.py
+│   │   ├── drift.py           <- Simulación de los escenarios de drift
+│   │   ├── detectors.py       <- PSI, Kolmogórov-Smirnov y nulos por variable
+│   │   ├── evaluation.py      <- MAE, RMSE, WAPE y deterioro por escenario
+│   │   ├── alerts.py          <- Niveles de alerta y acciones recomendadas
+│   │   ├── plots.py           <- Gráficas de PSI, KS y MAE
+│   │   ├── tracking.py        <- Registro de cada escenario en el experimento mibici-drift
+│   │   └── run_drift.py       <- Ejecución integrada sobre el mes de referencia
 │   └── modeling
 │       ├── __init__.py
 │       ├── pipeline.py        <- Pipeline de scikit-learn (imputación, escalado, TargetEncoder)
@@ -416,11 +590,12 @@ docker run -p 8000:8000 ml-service:latest
 ├── reports
 │   ├── diagnostico_raw.md     <- Hallazgos del diagnóstico de los datos crudos
 │   ├── preprocesamiento.md    <- Decisiones de preprocesamiento
-│   └── figures                <- Figuras del EDA (eda_*.png) y del análisis de errores (hgb_*.png)
+│   └── figures                <- Figuras del EDA (eda_*), del análisis de errores (hgb_*) y del drift (drift_*)
 │
 └── tests                      <- Pruebas con pytest (ver Pruebas)
     ├── fixtures               <- Muestra fija de 1,000 filas del v3 y sus predicciones esperadas
-    └── test_*.py              <- Pruebas unitarias de los módulos de mibici
+    ├── integration/test_e2e.py <- Pruebas de integración de extremo a extremo
+    └── test_*.py              <- Pruebas unitarias de los módulos de mibici, la API y el drift
 ```
 
 `data/` (crudos, intermedios y procesados), `mlflow.db` y `mlruns/` se generan localmente
